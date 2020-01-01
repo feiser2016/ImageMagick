@@ -17,13 +17,13 @@
 %                                 October 1996                                %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -391,9 +391,10 @@ MagickExport Image *AdaptiveBlurImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_AdaptiveBlurImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,AdaptiveBlurImageTag,progress++,
+        progress++;
+        proceed=SetImageProgress(image,AdaptiveBlurImageTag,progress,
           image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
@@ -711,9 +712,10 @@ MagickExport Image *AdaptiveSharpenImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_AdaptiveSharpenImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,AdaptiveSharpenImageTag,progress++,
+        progress++;
+        proceed=SetImageProgress(image,AdaptiveSharpenImageTag,progress,
           image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
@@ -893,7 +895,7 @@ static void Hull(const Image *image,const ssize_t x_offset,
   assert(g != (Quantum *) NULL);
   p=f+(columns+2);
   q=g+(columns+2);
-  r=p+(y_offset*(columns+2)+x_offset);
+  r=p+(y_offset*((ssize_t) columns+2)+x_offset);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) \
     magick_number_threads(image,image,rows,1)
@@ -929,8 +931,8 @@ static void Hull(const Image *image,const ssize_t x_offset,
   }
   p=f+(columns+2);
   q=g+(columns+2);
-  r=q+(y_offset*(columns+2)+x_offset);
-  s=q-(y_offset*(columns+2)+x_offset);
+  r=q+(y_offset*((ssize_t) columns+2)+x_offset);
+  s=q-(y_offset*((ssize_t) columns+2)+x_offset);
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
   #pragma omp parallel for schedule(static) \
     magick_number_threads(image,image,rows,1)
@@ -1624,9 +1626,10 @@ MagickExport Image *KuwaharaImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_KuwaharaImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,KuwaharaImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,KuwaharaImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2206,9 +2209,10 @@ MagickExport Image *MotionBlurImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_MotionBlurImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,BlurImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,BlurImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2588,17 +2592,20 @@ MagickExport Image *PreviewImage(const Image *image,const PreviewType preview,
       }
       case RaisePreview:
       {
+        RectangleInfo
+          raise;
+
         preview_image=CloneImage(thumbnail,0,0,MagickTrue,exception);
         if (preview_image == (Image *) NULL)
           break;
-        geometry.width=(size_t) (2*i+2);
-        geometry.height=(size_t) (2*i+2);
-        geometry.x=(i-1)/2;
-        geometry.y=(i-1)/2;
-        (void) RaiseImage(preview_image,&geometry,MagickTrue,exception);
+        raise.width=(size_t) (2*i+2);
+        raise.height=(size_t) (2*i+2);
+        raise.x=(i-1)/2;
+        raise.y=(i-1)/2;
+        (void) RaiseImage(preview_image,&raise,MagickTrue,exception);
         (void) FormatLocaleString(label,MagickPathExtent,
-          "raise %.20gx%.20g%+.20g%+.20g",(double) geometry.width,(double)
-          geometry.height,(double) geometry.x,(double) geometry.y);
+          "raise %.20gx%.20g%+.20g%+.20g",(double) raise.width,(double)
+          raise.height,(double) raise.x,(double) raise.y);
         break;
       }
       case SegmentPreview:
@@ -3017,9 +3024,10 @@ MagickExport Image *RotationalBlurImage(const Image *image,const double angle,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_RotationalBlurImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,BlurImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,BlurImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3352,9 +3360,10 @@ MagickExport Image *SelectiveBlurImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_SelectiveBlurImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,SelectiveBlurImageTag,progress++,
+        progress++;
+        proceed=SetImageProgress(image,SelectiveBlurImageTag,progress,
           image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
@@ -3362,6 +3371,7 @@ MagickExport Image *SelectiveBlurImage(const Image *image,const double radius,
   }
   blur_image->type=image->type;
   blur_view=DestroyCacheView(blur_view);
+  luminance_view=DestroyCacheView(luminance_view);
   image_view=DestroyCacheView(image_view);
   luminance_image=DestroyImage(luminance_image);
   kernel=(MagickRealType *) RelinquishAlignedMemory(kernel);
@@ -3405,6 +3415,8 @@ MagickExport Image *SelectiveBlurImage(const Image *image,const double radius,
 MagickExport Image *ShadeImage(const Image *image,const MagickBooleanType gray,
   const double azimuth,const double elevation,ExceptionInfo *exception)
 {
+#define GetShadeIntensity(image,pixel) \
+  ClampPixel(GetPixelIntensity((image),(pixel)))
 #define ShadeImageTag  "Shade/Image"
 
   CacheView
@@ -3520,19 +3532,19 @@ MagickExport Image *ShadeImage(const Image *image,const MagickBooleanType gray,
       center=pre+(linear_image->columns+2)*GetPixelChannels(linear_image);
       post=center+(linear_image->columns+2)*GetPixelChannels(linear_image);
       normal.x=(double) (
-        GetPixelIntensity(linear_image,pre-GetPixelChannels(linear_image))+
-        GetPixelIntensity(linear_image,center-GetPixelChannels(linear_image))+
-        GetPixelIntensity(linear_image,post-GetPixelChannels(linear_image))-
-        GetPixelIntensity(linear_image,pre+GetPixelChannels(linear_image))-
-        GetPixelIntensity(linear_image,center+GetPixelChannels(linear_image))-
-        GetPixelIntensity(linear_image,post+GetPixelChannels(linear_image)));
+        GetShadeIntensity(linear_image,pre-GetPixelChannels(linear_image))+
+        GetShadeIntensity(linear_image,center-GetPixelChannels(linear_image))+
+        GetShadeIntensity(linear_image,post-GetPixelChannels(linear_image))-
+        GetShadeIntensity(linear_image,pre+GetPixelChannels(linear_image))-
+        GetShadeIntensity(linear_image,center+GetPixelChannels(linear_image))-
+        GetShadeIntensity(linear_image,post+GetPixelChannels(linear_image)));
       normal.y=(double) (
-        GetPixelIntensity(linear_image,post-GetPixelChannels(linear_image))+
-        GetPixelIntensity(linear_image,post)+
-        GetPixelIntensity(linear_image,post+GetPixelChannels(linear_image))-
-        GetPixelIntensity(linear_image,pre-GetPixelChannels(linear_image))-
-        GetPixelIntensity(linear_image,pre)-
-        GetPixelIntensity(linear_image,pre+GetPixelChannels(linear_image)));
+        GetShadeIntensity(linear_image,post-GetPixelChannels(linear_image))+
+        GetShadeIntensity(linear_image,post)+
+        GetShadeIntensity(linear_image,post+GetPixelChannels(linear_image))-
+        GetShadeIntensity(linear_image,pre-GetPixelChannels(linear_image))-
+        GetShadeIntensity(linear_image,pre)-
+        GetShadeIntensity(linear_image,pre+GetPixelChannels(linear_image)));
       if ((fabs(normal.x) <= MagickEpsilon) &&
           (fabs(normal.y) <= MagickEpsilon))
         shade=light.z;
@@ -3592,9 +3604,10 @@ MagickExport Image *ShadeImage(const Image *image,const MagickBooleanType gray,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ShadeImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,ShadeImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,ShadeImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3855,9 +3868,10 @@ MagickExport Image *SpreadImage(const Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_SpreadImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,SpreadImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,SpreadImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3939,12 +3953,14 @@ MagickExport Image *UnsharpMaskImage(const Image *image,const double radius,
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   assert(exception != (ExceptionInfo *) NULL);
+/* This kernel appears to be broken.
 #if defined(MAGICKCORE_OPENCL_SUPPORT)
   unsharp_image=AccelerateUnsharpMaskImage(image,radius,sigma,gain,threshold,
     exception);
   if (unsharp_image != (Image *) NULL)
     return(unsharp_image);
 #endif
+*/
   unsharp_image=BlurImage(image,radius,sigma,exception);
   if (unsharp_image == (Image *) NULL)
     return((Image *) NULL);
@@ -4027,9 +4043,10 @@ MagickExport Image *UnsharpMaskImage(const Image *image,const double radius,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_UnsharpMaskImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,SharpenImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,SharpenImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }

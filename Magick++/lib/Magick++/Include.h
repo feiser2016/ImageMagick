@@ -27,6 +27,9 @@
 #include <math.h>
 #include <sys/types.h>
 
+#include <errno.h>
+#include <stdint.h>
+
 #if defined(__BORLANDC__)
 #  include <vcl.h> /* Borland C++ Builder 4.0 requirement */
 #endif // defined(__BORLANDC__)
@@ -119,6 +122,9 @@ namespace MagickCore
 #        if defined(MAGICKCORE_JPEG_DELEGATE)
 #          pragma comment(lib, "CORE_DB_jpeg_.lib")
 #        endif
+#        if defined(MAGICKCORE_JXL_DELEGATE)
+#          pragma comment(lib, "CORE_DB_jxl_.lib")
+#        endif
 #        if defined(MAGICKCORE_LCMS_DELEGATE)
 #          pragma comment(lib, "CORE_DB_lcms_.lib")
 #        endif
@@ -192,6 +198,9 @@ namespace MagickCore
 #        endif
 #        if defined(MAGICKCORE_JPEG_DELEGATE)
 #          pragma comment(lib, "CORE_RL_jpeg_.lib")
+#        endif
+#        if defined(MAGICKCORE_JXL_DELEGATE)
+#          pragma comment(lib, "CORE_RL_jxl_.lib")
 #        endif
 #        if defined(MAGICKCORE_LCMS_DELEGATE)
 #          pragma comment(lib, "CORE_RL_lcms_.lib")
@@ -500,9 +509,12 @@ namespace Magick
   // Compression algorithms
   using MagickCore::CompressionType;
   using MagickCore::UndefinedCompression;
+  using MagickCore::NoCompression;
   using MagickCore::B44ACompression;
   using MagickCore::B44Compression;
   using MagickCore::BZipCompression;
+  using MagickCore::DWAACompression;
+  using MagickCore::DWABCompression;
   using MagickCore::DXT1Compression;
   using MagickCore::DXT3Compression;
   using MagickCore::DXT5Compression;
@@ -515,12 +527,13 @@ namespace Magick
   using MagickCore::LosslessJPEGCompression;
   using MagickCore::LZMACompression;
   using MagickCore::LZWCompression;
-  using MagickCore::NoCompression;
   using MagickCore::PizCompression;
   using MagickCore::Pxr24Compression;
   using MagickCore::RLECompression;
+  using MagickCore::WebPCompression;
   using MagickCore::ZipCompression;
   using MagickCore::ZipSCompression;
+  using MagickCore::ZstdCompression;
 
   // Decoration types
   using MagickCore::DecorationType;
@@ -888,7 +901,7 @@ namespace Magick
   using MagickCore::RightTopOrientation;
   using MagickCore::RightBottomOrientation;
   using MagickCore::LeftBottomOrientation;
-  
+
   // Paint methods
   using MagickCore::PaintMethod;
   using MagickCore::UndefinedMethod;
@@ -1033,7 +1046,7 @@ namespace Magick
   using MagickCore::PerceptualIntent;
   using MagickCore::AbsoluteIntent;
   using MagickCore::RelativeIntent;
-  
+
   // Resource types
   using MagickCore::ResourceType;
   using MagickCore::UndefinedResource;

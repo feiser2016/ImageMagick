@@ -17,13 +17,13 @@
 %                               September 2011                                %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -61,6 +61,7 @@
 #include "MagickCore/pixel-private.h"
 #include "MagickCore/string-private.h"
 #include "MagickCore/thread-private.h"
+#include "MagickCore/timer-private.h"
 
 /*
   Constant declaration.
@@ -234,9 +235,9 @@ static Image *SparseColorOption(const Image *image,
   x=0;
   while( *p != '\0' )
   {
-    GetNextToken(p,&p,MagickPathExtent,token);
-    if ( token[0] == ',' ) continue;
-    if ( isalpha((int) token[0]) || token[0] == '#' )
+    (void) GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == ',') continue;
+    if ( isalpha((int) ((unsigned char) *token)) || *token == '#' )
       x += number_colors;  /* color argument found */
     else
       x++;   /* floating point argument */
@@ -266,9 +267,9 @@ static Image *SparseColorOption(const Image *image,
   x=0;
   while( *p != '\0' && x < number_arguments ) {
     /* X coordinate */
-    token[0]=','; while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-    if ( token[0] == '\0' ) break;
-    if ( isalpha((int) token[0]) || token[0] == '#' ) {
+    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == '\0') break;
+    if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       (void) ThrowMagickException(exception,GetMagickModule(),
             OptionError, "InvalidArgument", "'%s': %s", "sparse-color",
             "Color found, instead of X-coord");
@@ -277,9 +278,9 @@ static Image *SparseColorOption(const Image *image,
     }
     sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
     /* Y coordinate */
-    token[0]=','; while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-    if ( token[0] == '\0' ) break;
-    if ( isalpha((int) token[0]) || token[0] == '#' ) {
+    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == '\0') break;
+    if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       (void) ThrowMagickException(exception,GetMagickModule(),
             OptionError, "InvalidArgument", "'%s': %s", "sparse-color",
             "Color found, instead of Y-coord");
@@ -288,9 +289,9 @@ static Image *SparseColorOption(const Image *image,
     }
     sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
     /* color name or function given in string argument */
-    token[0]=','; while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-    if ( token[0] == '\0' ) break;
-    if ( isalpha((int) token[0]) || token[0] == '#' ) {
+    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == '\0') break;
+    if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       /* Color string given */
       (void) QueryColorCompliance(token,AllCompliance,&color,
                 exception);
@@ -312,45 +313,45 @@ static Image *SparseColorOption(const Image *image,
       /* NB: token contains the first floating point value to use! */
       if ((GetPixelRedTraits(image) & UpdatePixelTrait) != 0)
         {
-        while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-        if ( token[0] == '\0' || isalpha((int)token[0]) || token[0] == '#' )
+        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
           break;
         sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        token[0] = ','; /* used this token - get another */
+        *token=','; /* used this token - get another */
       }
       if ((GetPixelGreenTraits(image) & UpdatePixelTrait) != 0)
         {
-        while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-        if ( token[0] == '\0' || isalpha((int)token[0]) || token[0] == '#' )
+        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
           break;
         sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        token[0] = ','; /* used this token - get another */
+        *token=','; /* used this token - get another */
       }
       if ((GetPixelBlueTraits(image) & UpdatePixelTrait) != 0)
         {
-        while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-        if ( token[0] == '\0' || isalpha((int)token[0]) || token[0] == '#' )
+        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
           break;
         sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        token[0] = ','; /* used this token - get another */
+        *token = ','; /* used this token - get another */
       }
       if (((GetPixelBlackTraits(image) & UpdatePixelTrait) != 0) &&
           (image->colorspace == CMYKColorspace))
         {
-        while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-        if ( token[0] == '\0' || isalpha((int)token[0]) || token[0] == '#' )
+        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
           break;
         sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        token[0] = ','; /* used this token - get another */
+        *token=','; /* used this token - get another */
       }
       if (((GetPixelAlphaTraits(image) & UpdatePixelTrait) != 0) &&
           image->alpha_trait != UndefinedPixelTrait)
         {
-        while ( token[0] == ',' ) GetNextToken(p,&p,MagickPathExtent,token);
-        if ( token[0] == '\0' || isalpha((int)token[0]) || token[0] == '#' )
+        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
           break;
         sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        token[0] = ','; /* used this token - get another */
+        *token = ','; /* used this token - get another */
       }
     }
   }
@@ -1239,11 +1240,11 @@ WandPrivate void CLISettingOptionInfo(MagickCLI *cli_wand,
     {
       if (LocaleCompare("quality",option+1) == 0)
         {
-          if (IsGeometry(arg1) == MagickFalse)
+          if (IfSetOption && (IsGeometry(arg1) == MagickFalse))
             CLIWandExceptArgBreak(OptionError,"InvalidArgument",option,arg1);
           _image_info->quality= IfSetOption ? StringToUnsignedLong(arg1)
                                             : UNDEFINED_COMPRESSION_QUALITY;
-          (void) SetImageOption(_image_info,option+1,ArgOption(NULL));
+          (void) SetImageOption(_image_info,option+1,ArgOption("0"));
           break;
         }
       if (LocaleCompare("quantize",option+1) == 0)
@@ -1334,7 +1335,7 @@ WandPrivate void CLISettingOptionInfo(MagickCLI *cli_wand,
             CLIWandExceptArgBreak(OptionError,"InvalidArgument",option,arg1);
           SetRandomSecretKey(
                IfSetOption ? (unsigned long) StringToUnsignedLong(arg1)
-                           : (unsigned long) time((time_t *) NULL) );
+                           : (unsigned long) time((time_t *) NULL));
           break;
         }
       if (LocaleCompare("size",option+1) == 0)
@@ -1966,6 +1967,16 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
           new_image=ChopImage(_image,&geometry,_exception);
           break;
         }
+      if (LocaleCompare("clahe",option+1) == 0)
+        {
+          if (IsGeometry(arg1) == MagickFalse)
+            CLIWandExceptArgBreak(OptionError,"InvalidArgument",option,arg1);
+          flags=ParseGeometry(arg1,&geometry_info);
+          flags=ParseRegionGeometry(_image,arg1,&geometry,_exception);
+          (void) CLAHEImage(_image,geometry.width,geometry.height,
+            (size_t) geometry.x,geometry_info.psi,_exception);
+          break;
+        }
       if (LocaleCompare("clamp",option+1) == 0)
         {
           (void) ClampImage(_image,_exception);
@@ -1976,7 +1987,8 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
           if (IfNormalOp)
             (void) ClipImage(_image,_exception);
           else /* "+mask" remove the write mask */
-            (void) SetImageMask(_image,WritePixelMask,(Image *) NULL,_exception);
+            (void) SetImageMask(_image,WritePixelMask,(Image *) NULL,
+              _exception);
           break;
         }
       if (LocaleCompare("clip-mask",option+1) == 0)
@@ -2529,6 +2541,22 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
     }
     case 'k':
     {
+      if (LocaleCompare("kmeans",option+1) == 0)
+        {
+          /*
+            K-means clustering.
+          */
+          flags=ParseGeometry(arg1,&geometry_info);
+          if ((flags & (RhoValue|SigmaValue)) == 0)
+            CLIWandExceptArgBreak(OptionError,"InvalidArgument",option,arg1);
+          if ((flags & SigmaValue) == 0)
+            geometry_info.sigma=100.0;
+          if ((flags & XiValue) == 0)
+            geometry_info.xi=0.01;
+          (void) KmeansImage(_image,(size_t) geometry_info.rho,(size_t)
+           geometry_info.sigma,geometry_info.xi,_exception);
+          break;
+        }
       if (LocaleCompare("kuwahara",option+1) == 0)
         {
           /*
@@ -2607,22 +2635,22 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
             white_point;
 
           p=(const char *) arg1;
-          GetNextToken(p,&p,MagickPathExtent,token);  /* get black point color */
-          if ((isalpha((int) *token) != 0) || ((*token == '#') != 0))
+          (void) GetNextToken(p,&p,MagickPathExtent,token);  /* get black point color */
+          if ((isalpha((int) ((unsigned char) *token)) != 0) || ((*token == '#') != 0))
             (void) QueryColorCompliance(token,AllCompliance,
                       &black_point,_exception);
           else
             (void) QueryColorCompliance("#000000",AllCompliance,
                       &black_point,_exception);
-          if (isalpha((int) token[0]) || (token[0] == '#'))
-            GetNextToken(p,&p,MagickPathExtent,token);
+          if (isalpha((int) ((unsigned char) *token)) || (*token == '#'))
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
           if (*token == '\0')
             white_point=black_point; /* set everything to that color */
           else
             {
-              if ((isalpha((int) *token) == 0) && ((*token == '#') == 0))
-                GetNextToken(p,&p,MagickPathExtent,token); /* Get white point color. */
-              if ((isalpha((int) *token) != 0) || ((*token == '#') != 0))
+              if ((isalpha((int) ((unsigned char) *token)) == 0) && ((*token == '#') == 0))
+                (void) GetNextToken(p,&p,MagickPathExtent,token); /* Get white point color. */
+              if ((isalpha((int) ((unsigned char) *token)) != 0) || ((*token == '#') != 0))
                 (void) QueryColorCompliance(token,AllCompliance,
                            &white_point,_exception);
               else
@@ -2795,15 +2823,15 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
             iterations;
 
           p=arg1;
-          GetNextToken(p,&p,MagickPathExtent,token);
+          (void) GetNextToken(p,&p,MagickPathExtent,token);
           parse=ParseCommandOption(MagickMorphologyOptions,MagickFalse,token);
           if ( parse < 0 )
             CLIWandExceptArgBreak(OptionError,"UnrecognizedFunction",option,
               arg1);
           iterations=1L;
-          GetNextToken(p,&p,MagickPathExtent,token);
+          (void) GetNextToken(p,&p,MagickPathExtent,token);
           if ((*p == ':') || (*p == ','))
-            GetNextToken(p,&p,MagickPathExtent,token);
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
           if ((*p != '\0'))
             iterations=(ssize_t) StringToLong(p);
           kernel=AcquireKernelInfo(arg2,exception);
@@ -3809,10 +3837,16 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
              _images.
           */
           new_images=RemoveFirstImageFromList(&_images);
-          clut_image=RemoveLastImageFromList(&_images);
+          clut_image=RemoveFirstImageFromList(&_images);
           /* FUTURE - produce Exception, rather than silent fail */
           if (clut_image == (Image *) NULL)
-            break;
+            {
+              (void) ThrowMagickException(_exception,GetMagickModule(),
+                OptionError,"ImageSequenceRequired","`%s'",option);
+              new_images=DestroyImage(new_images);
+              status=MagickFalse;
+              break;
+            }
           (void) ClutImage(new_images,clut_image,new_images->interpolate,
             _exception);
           clut_image=DestroyImage(clut_image);
@@ -3856,7 +3890,13 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
           reconstruct_image=RemoveFirstImageFromList(&_images);
           /* FUTURE - produce Exception, rather than silent fail */
           if (reconstruct_image == (Image *) NULL)
-            break;
+            {
+              (void) ThrowMagickException(_exception,GetMagickModule(),
+                OptionError,"ImageSequenceRequired","`%s'",option);
+              image=DestroyImage(image);
+              status=MagickFalse;
+              break;
+            }
           metric=UndefinedErrorMetric;
           option=GetImageOption(_image_info,"metric");
           if (option != (const char *) NULL)
@@ -3916,7 +3956,13 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
           new_images=RemoveFirstImageFromList(&_images);
           source_image=RemoveFirstImageFromList(&_images);
           if (source_image == (Image *) NULL)
-            break; /* FUTURE - produce Exception, rather than silent fail */
+            {
+              (void) ThrowMagickException(_exception,GetMagickModule(),
+                OptionError,"ImageSequenceRequired","`%s'",option);
+              new_images=DestroyImage(new_images);
+              status=MagickFalse;
+              break;
+            }
 
           /* FUTURE - this should not be here! - should be part of -geometry */
           if (source_image->geometry != (char *) NULL)
@@ -3973,7 +4019,7 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
                     CopyAlphaCompositeOp,MagickTrue,0,0,_exception);
                   status&=CompositeImage(clone_image,new_images,OverCompositeOp,
                     clip_to_self,0,0,_exception);
-                  new_images=DestroyImage(new_images);
+                  new_images=DestroyImageList(new_images);
                   new_images=clone_image;
                 }
               mask_image=DestroyImage(mask_image);
@@ -4066,7 +4112,7 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
           if (parse < 0)
             CLIWandExceptArgBreak(OptionError,"UnrecognizedEvaluateOperator",
               option,arg1);
-          new_images=EvaluateImages(_images,(MagickEvaluateOperator)parse,
+          new_images=EvaluateImages(_images,(MagickEvaluateOperator) parse,
             _exception);
           break;
         }
@@ -4106,7 +4152,13 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
           new_images=RemoveFirstImageFromList(&_images);
           hald_image=RemoveLastImageFromList(&_images);
           if (hald_image == (Image *) NULL)
-            break;
+            {
+              (void) ThrowMagickException(_exception,GetMagickModule(),
+                OptionError,"ImageSequenceRequired","`%s'",option);
+              new_images=DestroyImage(new_images);
+              status=MagickFalse;
+              break;
+            }
           (void) HaldClutImage(new_images,hald_image,_exception);
           hald_image=DestroyImage(hald_image);
           break;
@@ -4121,15 +4173,20 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
             *magnitude_image,
             *phase_image;
 
-           magnitude_image=RemoveFirstImageFromList(&_images);
-           phase_image=RemoveFirstImageFromList(&_images);
-          /* FUTURE - produce Exception, rather than silent fail */
-           if (phase_image == (Image *) NULL)
-             break;
-           new_images=InverseFourierTransformImage(magnitude_image,phase_image,
-             IsNormalOp,_exception);
-           magnitude_image=DestroyImage(magnitude_image);
-           phase_image=DestroyImage(phase_image);
+          magnitude_image=RemoveFirstImageFromList(&_images);
+          phase_image=RemoveFirstImageFromList(&_images);
+          if (phase_image == (Image *) NULL)
+            {
+              (void) ThrowMagickException(_exception,GetMagickModule(),
+                OptionError,"ImageSequenceRequired","`%s'",option);
+              magnitude_image=DestroyImage(magnitude_image);
+              status=MagickFalse;
+              break;
+            }
+          new_images=InverseFourierTransformImage(magnitude_image,phase_image,
+            IsNormalOp,_exception);
+          magnitude_image=DestroyImage(magnitude_image);
+          phase_image=DestroyImage(phase_image);
           break;
         }
       if (LocaleCompare("insert",option+1) == 0)
@@ -4156,7 +4213,10 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
             {
                index_image=GetImageFromList(_images,index-1);
                if (index_image == (Image *) NULL)
-                 CLIWandExceptArgBreak(OptionError,"NoSuchImage",option,arg1);
+                 {
+                   insert_image=DestroyImage(insert_image);
+                   CLIWandExceptArgBreak(OptionError,"NoSuchImage",option,arg1);
+                 }
               InsertImageInList(&index_image,insert_image);
             }
           _images=GetFirstImageInList(index_image);

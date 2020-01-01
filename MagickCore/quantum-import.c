@@ -22,13 +22,13 @@
 %                               October 1998                                  %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -139,20 +139,18 @@ static inline const unsigned char *PushDoublePixel(QuantumInfo *quantum_info,
       quantum[5]=(*pixels++);
       quantum[6]=(*pixels++);
       quantum[7]=(*pixels++);
-      p=(double *) quantum;
-      *pixel=(*p);
-      *pixel-=quantum_info->minimum;
-      *pixel*=quantum_info->scale;
-      return(pixels);
     }
-  quantum[7]=(*pixels++);
-  quantum[6]=(*pixels++);
-  quantum[5]=(*pixels++);
-  quantum[4]=(*pixels++);
-  quantum[3]=(*pixels++);
-  quantum[2]=(*pixels++);
-  quantum[1]=(*pixels++);
-  quantum[0]=(*pixels++);
+  else
+    {
+      quantum[7]=(*pixels++);
+      quantum[6]=(*pixels++);
+      quantum[5]=(*pixels++);
+      quantum[4]=(*pixels++);
+      quantum[3]=(*pixels++);
+      quantum[2]=(*pixels++);
+      quantum[1]=(*pixels++);
+      quantum[0]=(*pixels++);
+    }
   p=(double *) quantum;
   *pixel=(*p);
   *pixel-=quantum_info->minimum;
@@ -160,8 +158,9 @@ static inline const unsigned char *PushDoublePixel(QuantumInfo *quantum_info,
   return(pixels);
 }
 
-static inline const unsigned char *PushQuantumFloatPixel(QuantumInfo *quantum_info,
-  const unsigned char *magick_restrict pixels,float *pixel)
+static inline const unsigned char *PushQuantumFloatPixel(
+  QuantumInfo *quantum_info,const unsigned char *magick_restrict pixels,
+  float *pixel)
 {
   float
     *p;
@@ -175,20 +174,23 @@ static inline const unsigned char *PushQuantumFloatPixel(QuantumInfo *quantum_in
       quantum[1]=(*pixels++);
       quantum[2]=(*pixels++);
       quantum[3]=(*pixels++);
-      p=(float *) quantum;
-      *pixel=(*p);
-      *pixel-=quantum_info->minimum;
-      *pixel*=quantum_info->scale;
-      return(pixels);
-    }
-  quantum[3]=(*pixels++);
-  quantum[2]=(*pixels++);
-  quantum[1]=(*pixels++);
-  quantum[0]=(*pixels++);
+     }
+   else
+     {
+       quantum[3]=(*pixels++);
+       quantum[2]=(*pixels++);
+       quantum[1]=(*pixels++);
+       quantum[0]=(*pixels++);
+     }
   p=(float *) quantum;
   *pixel=(*p);
   *pixel-=quantum_info->minimum;
-  *pixel*=quantum_info->scale;
+  *pixel*=(float) quantum_info->scale;
+  if (*pixel < FLT_MIN)
+    *pixel=FLT_MIN;
+  else
+    if (*pixel > FLT_MAX)
+      *pixel=FLT_MAX;
   return(pixels);
 }
 
@@ -4260,7 +4262,7 @@ MagickExport size_t ImportQuantumPixels(const Image *image,
         q+=GetPixelChannels(image);
       }
     }
-  if (quantum_info->alpha_type == DisassociatedQuantumAlpha)
+  if (quantum_info->alpha_type == AssociatedQuantumAlpha)
     {
       double
         gamma,

@@ -1,11 +1,11 @@
 /*
-  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization
+  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization
   dedicated to making software imaging solutions freely available.
 
-  You may not use this file except in compliance with the License.
+  You may not use this file except in compliance with the License.  You may
   obtain a copy of the License at
 
-    https://www.imagemagick.org/script/license.php
+    https://imagemagick.org/script/license.php
 
   Unless required by applicable law or agreed to in writing, software
   distributed under the License is distributed on an "AS IS" BASIS,
@@ -124,6 +124,9 @@ typedef struct _NexusInfo
 
   size_t
     signature;
+
+  struct _NexusInfo
+    *virtual_nexus;
 } NexusInfo;
 
 typedef struct _CacheInfo
@@ -226,6 +229,10 @@ typedef struct _CacheInfo
 
   MagickBooleanType
     composite_mask;
+
+  MagickSizeType
+    width_limit,
+    height_limit;
 } CacheInfo;
 
 extern MagickPrivate Cache

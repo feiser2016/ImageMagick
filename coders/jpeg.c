@@ -23,7 +23,7 @@
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -39,8 +39,7 @@
 %
 %
 */
-
-
+
 /*
   Include declarations.
 */
@@ -104,7 +103,7 @@
 #define ICC_PROFILE  "ICC_PROFILE"
 #define IPTC_MARKER  (JPEG_APP0+13)
 #define XML_MARKER  (JPEG_APP0+1)
-#define MaxBufferExtent  16384
+#define MaxJPEGScans  1024
 
 /*
   Typedef declarations.
@@ -124,8 +123,8 @@ typedef struct _DestinationManager
 
 typedef struct _ErrorManager
 {
-  ExceptionInfo
-    *exception;
+  jmp_buf
+    error_recovery;
 
   Image
     *image;
@@ -136,8 +135,8 @@ typedef struct _ErrorManager
   StringInfo
     *profile;
 
-  jmp_buf
-    error_recovery;
+  ExceptionInfo
+    *exception;
 } ErrorManager;
 
 typedef struct _SourceManager
@@ -172,6 +171,13 @@ typedef struct _QuantizationTable
   unsigned int
     *levels;
 } QuantizationTable;
+
+/*
+  Const declarations.
+*/
+static const char
+  xmp_namespace[] = "http://ns.adobe.com/xap/1.0/ ";
+#define XmpNamespaceExtent 28
 
 /*
   Forward declarations.
@@ -251,7 +257,7 @@ static boolean FillInputBuffer(j_decompress_ptr cinfo)
 
   source=(SourceManager *) cinfo->src;
   source->manager.bytes_in_buffer=(size_t) ReadBlob(source->image,
-    MaxBufferExtent,source->buffer);
+    MagickMinBufferExtent,source->buffer);
   if (source->manager.bytes_in_buffer == 0)
     {
       if (source->start_of_blob != FALSE)
@@ -269,7 +275,11 @@ static boolean FillInputBuffer(j_decompress_ptr cinfo)
 static int GetCharacter(j_decompress_ptr jpeg_info)
 {
   if (jpeg_info->src->bytes_in_buffer == 0)
-    (void) (*jpeg_info->src->fill_input_buffer)(jpeg_info);
+    {
+      (void) (*jpeg_info->src->fill_input_buffer)(jpeg_info);
+      if (jpeg_info->err->msg_code == JWRN_JPEG_EOF)
+        return EOF;
+    }
   jpeg_info->src->bytes_in_buffer--;
   return((int) GETJOCTET(*jpeg_info->src->next_input_byte++));
 }
@@ -331,6 +341,29 @@ static void JPEGErrorHandler(j_common_ptr jpeg_info)
   else
     (void) ThrowMagickException(exception,GetMagickModule(),CorruptImageError,
       (char *) message,"`%s'",image->filename);
+  longjmp(error_manager->error_recovery,1);
+}
+
+static void JPEGProgressHandler(j_common_ptr jpeg_info)
+{
+  ErrorManager
+    *error_manager;
+
+  ExceptionInfo
+    *exception;
+
+  Image
+    *image;
+
+  error_manager=(ErrorManager *) jpeg_info->client_data;
+  image=error_manager->image;
+  exception=error_manager->exception;
+  if (jpeg_info->is_decompressor == 0)
+    return;
+  if (((j_decompress_ptr) jpeg_info)->input_scan_number < MaxJPEGScans)
+    return;
+  (void) ThrowMagickException(exception,GetMagickModule(),CorruptImageError,
+    "too many scans","`%s'",image->filename);
   longjmp(error_manager->error_recovery,1);
 }
 
@@ -424,7 +457,7 @@ static boolean ReadComment(j_decompress_ptr jpeg_info)
   */
   error_manager->profile=comment;
   p=GetStringInfoDatum(comment);
-  for (i=0; i < (ssize_t) GetStringInfoLength(comment); i++)
+  for (i=0; i < (ssize_t) length; i++)
   {
     int
       c;
@@ -436,6 +469,14 @@ static boolean ReadComment(j_decompress_ptr jpeg_info)
   }
   *p='\0';
   error_manager->profile=NULL;
+  if (i != (ssize_t) length)
+    {
+      comment=DestroyStringInfo(comment);
+      (void) ThrowMagickException(exception,GetMagickModule(),
+        CorruptImageError,"InsufficientImageDataInFile","`%s'",
+        image->filename);
+      return(FALSE);
+    }
   p=GetStringInfoDatum(comment);
   (void) SetImageProperty(image,"comment",(const char *) p,exception);
   comment=DestroyStringInfo(comment);
@@ -512,7 +553,7 @@ static boolean ReadICCProfile(j_decompress_ptr jpeg_info)
     }
   error_manager->profile=profile;
   p=GetStringInfoDatum(profile);
-  for (i=(ssize_t) GetStringInfoLength(profile)-1; i >= 0; i--)
+  for (i=0; i < (ssize_t) length; i++)
   {
     int
       c;
@@ -523,6 +564,14 @@ static boolean ReadICCProfile(j_decompress_ptr jpeg_info)
     *p++=(unsigned char) c;
   }
   error_manager->profile=NULL;
+  if (i != (ssize_t) length)
+    {
+      profile=DestroyStringInfo(profile);
+      (void) ThrowMagickException(exception,GetMagickModule(),
+        CorruptImageError,"InsufficientImageDataInFile","`%s'",
+        image->filename);
+      return(FALSE);
+    }
   icc_profile=(StringInfo *) GetImageProfile(image,"icc");
   if (icc_profile != (StringInfo *) NULL)
     {
@@ -629,7 +678,7 @@ static boolean ReadIPTCProfile(j_decompress_ptr jpeg_info)
     }
   error_manager->profile=profile;
   p=GetStringInfoDatum(profile);
-  for (i=0;  i < (ssize_t) GetStringInfoLength(profile); i++)
+  for (i=0; i < (ssize_t) length; i++)
   {
     int
       c;
@@ -640,6 +689,17 @@ static boolean ReadIPTCProfile(j_decompress_ptr jpeg_info)
     *p++=(unsigned char) c;
   }
   error_manager->profile=NULL;
+  if (i != (ssize_t) length)
+    {
+      profile=DestroyStringInfo(profile);
+      (void) ThrowMagickException(exception,GetMagickModule(),
+        CorruptImageError,"InsufficientImageDataInFile","`%s'",
+        image->filename);
+      return(FALSE);
+    }
+  /*
+    The IPTC profile is actually an 8bim.
+  */
   iptc_profile=(StringInfo *) GetImageProfile(image,"8bim");
   if (iptc_profile != (StringInfo *) NULL)
     {
@@ -720,7 +780,7 @@ static boolean ReadProfile(j_decompress_ptr jpeg_info)
     }
   error_manager->profile=profile;
   p=GetStringInfoDatum(profile);
-  for (i=0; i < (ssize_t) GetStringInfoLength(profile); i++)
+  for (i=0; i < (ssize_t) length; i++)
   {
     int
       c;
@@ -731,33 +791,44 @@ static boolean ReadProfile(j_decompress_ptr jpeg_info)
     *p++=(unsigned char) c;
   }
   error_manager->profile=NULL;
+  if (i != (ssize_t) length)
+    {
+      profile=DestroyStringInfo(profile);
+      (void) ThrowMagickException(exception,GetMagickModule(),
+        CorruptImageError,"InsufficientImageDataInFile","`%s'",
+        image->filename);
+      return(FALSE);
+    }
   if (marker == 1)
     {
       p=GetStringInfoDatum(profile);
       if ((length > 4) && (LocaleNCompare((char *) p,"exif",4) == 0))
         (void) CopyMagickString(name,"exif",MagickPathExtent);
-      if ((length > 5) && (LocaleNCompare((char *) p,"http:",5) == 0))
-        {
-          ssize_t
-            j;
-
-          /*
-            Extract namespace from XMP profile.
-          */
-          p=GetStringInfoDatum(profile);
-          for (j=0; j < (ssize_t) GetStringInfoLength(profile); j++)
+      else
+        if ((length > XmpNamespaceExtent) &&
+            (LocaleNCompare((char *) p,xmp_namespace,XmpNamespaceExtent-1) == 0))
           {
-            if (*p == '\0')
-              break;
-            p++;
+            ssize_t
+              j;
+
+            /*
+              Extract namespace from XMP profile.
+            */
+            p=GetStringInfoDatum(profile)+XmpNamespaceExtent;
+            for (j=XmpNamespaceExtent; j < (ssize_t) GetStringInfoLength(profile); j++)
+            {
+              if (*p == '\0')
+                break;
+              p++;
+            }
+            if (j < (ssize_t) GetStringInfoLength(profile))
+              (void) DestroyStringInfo(SplitStringInfo(profile,(size_t) (j+1)));
+            (void) CopyMagickString(name,"xmp",MagickPathExtent);
           }
-          if (j < (ssize_t) GetStringInfoLength(profile))
-            (void) DestroyStringInfo(SplitStringInfo(profile,(size_t) (j+1)));
-          (void) CopyMagickString(name,"xmp",MagickPathExtent);
-        }
     }
   previous_profile=GetImageProfile(image,name);
-  if (previous_profile != (const StringInfo *) NULL)
+  if ((previous_profile != (const StringInfo *) NULL) &&
+      (CompareStringInfo(previous_profile,profile) != 0))
     {
       size_t
         profile_length;
@@ -771,6 +842,7 @@ static boolean ReadProfile(j_decompress_ptr jpeg_info)
       (void) memcpy(GetStringInfoDatum(profile),
         GetStringInfoDatum(previous_profile),
         GetStringInfoLength(previous_profile));
+      GetStringInfoDatum(profile)[GetStringInfoLength(profile)]='\0';
     }
   status=SetImageProfile(image,name,profile,exception);
   profile=DestroyStringInfo(profile);
@@ -817,7 +889,7 @@ static void JPEGSourceManager(j_decompress_ptr cinfo,Image *image)
     ((j_common_ptr) cinfo,JPOOL_IMAGE,sizeof(SourceManager));
   source=(SourceManager *) cinfo->src;
   source->buffer=(JOCTET *) (*cinfo->mem->alloc_small)
-    ((j_common_ptr) cinfo,JPOOL_IMAGE,MaxBufferExtent*sizeof(JOCTET));
+    ((j_common_ptr) cinfo,JPOOL_IMAGE,MagickMinBufferExtent*sizeof(JOCTET));
   source=(SourceManager *) cinfo->src;
   source->manager.init_source=InitializeSource;
   source->manager.fill_input_buffer=FillInputBuffer;
@@ -1035,6 +1107,7 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
     value[MagickPathExtent];
 
   const char
+    *dct_method,
     *option;
 
   ErrorManager
@@ -1070,6 +1143,9 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
 
   struct jpeg_error_mgr
     jpeg_error;
+
+  struct jpeg_progress_mgr
+    jpeg_progress;
 
   register JSAMPLE
     *p;
@@ -1110,6 +1186,7 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
   (void) memset(&error_manager,0,sizeof(error_manager));
   (void) memset(&jpeg_info,0,sizeof(jpeg_info));
   (void) memset(&jpeg_error,0,sizeof(jpeg_error));
+  (void) memset(&jpeg_progress,0,sizeof(jpeg_progress));
   jpeg_info.err=jpeg_std_error(&jpeg_error);
   jpeg_info.err->emit_message=(void (*)(j_common_ptr,int)) JPEGWarningHandler;
   jpeg_info.err->error_exit=(void (*)(j_common_ptr)) JPEGErrorHandler;
@@ -1131,6 +1208,8 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
   jpeg_create_decompress(&jpeg_info);
   if (GetMaxMemoryRequest() != ~0UL)
     jpeg_info.mem->max_memory_to_use=(long) GetMaxMemoryRequest();
+  jpeg_progress.progress_monitor=(void (*)(j_common_ptr)) JPEGProgressHandler;
+  jpeg_info.progress=(&jpeg_progress);
   JPEGSourceManager(&jpeg_info,image);
   jpeg_set_marker_processor(&jpeg_info,JPEG_COM,ReadComment);
   option=GetImageOption(image_info,"profile:skip");
@@ -1232,33 +1311,32 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
   if (option != (const char *) NULL)
     jpeg_info.do_block_smoothing=IsStringTrue(option) != MagickFalse ? TRUE :
       FALSE;
-  jpeg_info.dct_method=JDCT_FLOAT;
-  option=GetImageOption(image_info,"jpeg:dct-method");
-  if (option != (const char *) NULL)
-    switch (*option)
+  dct_method=GetImageOption(image_info,"jpeg:dct-method");
+  if (dct_method != (const char *) NULL)
+    switch (*dct_method)
     {
       case 'D':
       case 'd':
       {
-        if (LocaleCompare(option,"default") == 0)
+        if (LocaleCompare(dct_method,"default") == 0)
           jpeg_info.dct_method=JDCT_DEFAULT;
         break;
       }
       case 'F':
       case 'f':
       {
-        if (LocaleCompare(option,"fastest") == 0)
+        if (LocaleCompare(dct_method,"fastest") == 0)
           jpeg_info.dct_method=JDCT_FASTEST;
-        if (LocaleCompare(option,"float") == 0)
+        if (LocaleCompare(dct_method,"float") == 0)
           jpeg_info.dct_method=JDCT_FLOAT;
         break;
       }
       case 'I':
       case 'i':
       {
-        if (LocaleCompare(option,"ifast") == 0)
+        if (LocaleCompare(dct_method,"ifast") == 0)
           jpeg_info.dct_method=JDCT_IFAST;
-        if (LocaleCompare(option,"islow") == 0)
+        if (LocaleCompare(dct_method,"islow") == 0)
           jpeg_info.dct_method=JDCT_ISLOW;
         break;
       }
@@ -1337,6 +1415,10 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
   (void) FormatLocaleString(value,MagickPathExtent,"%.20g",(double)
     jpeg_info.out_color_space);
   (void) SetImageProperty(image,"jpeg:colorspace",value,exception);
+#if defined(D_ARITH_CODING_SUPPORTED)
+  if (jpeg_info.arith_code == TRUE)
+    (void) SetImageProperty(image,"jpeg:coding","arithmetic",exception);
+#endif
   if (image_info->ping != MagickFalse)
     {
       jpeg_destroy_decompress(&jpeg_info);
@@ -1564,6 +1646,8 @@ static Image *ReadJPEGImage(const ImageInfo *image_info,
 ModuleExport size_t RegisterJPEGImage(void)
 {
 #define JPEGDescription "Joint Photographic Experts Group JFIF format"
+#define JPEGStringify(macro_or_string)  JPEGStringifyArg(macro_or_string)
+#define JPEGStringifyArg(contents)  #contents
 
   char
     version[MagickPathExtent];
@@ -1572,8 +1656,12 @@ ModuleExport size_t RegisterJPEGImage(void)
     *entry;
 
   *version='\0';
-#if defined(JPEG_LIB_VERSION)
-  (void) FormatLocaleString(version,MagickPathExtent,"%d",JPEG_LIB_VERSION);
+#if defined(LIBJPEG_TURBO_VERSION)
+  (void) CopyMagickString(version,"libjpeg-turbo " JPEGStringify(
+    LIBJPEG_TURBO_VERSION),MagickPathExtent);
+#elif defined(JPEG_LIB_VERSION)
+  (void) FormatLocaleString(version,MagickPathExtent,"libjpeg %d",
+    JPEG_LIB_VERSION);
 #endif
   entry=AcquireMagickInfo("JPEG","JPE",JPEGDescription);
 #if (JPEG_LIB_VERSION < 80) && !defined(LIBJPEG_TURBO_VERSION)
@@ -1733,8 +1821,8 @@ static boolean EmptyOutputBuffer(j_compress_ptr cinfo)
 
   destination=(DestinationManager *) cinfo->dest;
   destination->manager.free_in_buffer=(size_t) WriteBlob(destination->image,
-    MaxBufferExtent,destination->buffer);
-  if (destination->manager.free_in_buffer != MaxBufferExtent)
+    MagickMinBufferExtent,destination->buffer);
+  if (destination->manager.free_in_buffer != MagickMinBufferExtent)
     ERREXIT(cinfo,JERR_FILE_WRITE);
   destination->manager.next_output_byte=destination->buffer;
   return(TRUE);
@@ -1941,9 +2029,9 @@ static void InitializeDestination(j_compress_ptr cinfo)
 
   destination=(DestinationManager *) cinfo->dest;
   destination->buffer=(JOCTET *) (*cinfo->mem->alloc_small)
-    ((j_common_ptr) cinfo,JPOOL_IMAGE,MaxBufferExtent*sizeof(JOCTET));
+    ((j_common_ptr) cinfo,JPOOL_IMAGE,MagickMinBufferExtent*sizeof(JOCTET));
   destination->manager.next_output_byte=destination->buffer;
-  destination->manager.free_in_buffer=MaxBufferExtent;
+  destination->manager.free_in_buffer=MagickMinBufferExtent;
 }
 
 static void TerminateDestination(j_compress_ptr cinfo)
@@ -1952,15 +2040,15 @@ static void TerminateDestination(j_compress_ptr cinfo)
     *destination;
 
   destination=(DestinationManager *) cinfo->dest;
-  if ((MaxBufferExtent-(int) destination->manager.free_in_buffer) > 0)
+  if ((MagickMinBufferExtent-(int) destination->manager.free_in_buffer) > 0)
     {
       ssize_t
         count;
 
-      count=WriteBlob(destination->image,MaxBufferExtent-
+      count=WriteBlob(destination->image,MagickMinBufferExtent-
         destination->manager.free_in_buffer,destination->buffer);
       if (count != (ssize_t)
-          (MaxBufferExtent-destination->manager.free_in_buffer))
+          (MagickMinBufferExtent-destination->manager.free_in_buffer))
         ERREXIT(cinfo,JERR_FILE_WRITE);
     }
 }
@@ -1996,6 +2084,17 @@ static void WriteProfile(j_compress_ptr jpeg_info,Image *image,
   for (name=GetNextImageProfile(image); name != (const char *) NULL; )
   {
     profile=GetImageProfile(image,name);
+    length=GetStringInfoLength(profile);
+    if (LocaleNCompare(name,"APP",3) == 0)
+      {
+        int
+          id;
+
+        id=JPEG_APP0+StringToInteger(name+3);
+        for (i=0; i < (ssize_t) length; i+=65533L)
+           jpeg_write_marker(jpeg_info,id,GetStringInfoDatum(profile)+i,
+             (unsigned int) MagickMin(length-i,65533));
+      }
     if (LocaleCompare(name,"EXIF") == 0)
       {
         length=GetStringInfoLength(profile);
@@ -2064,7 +2163,8 @@ static void WriteProfile(j_compress_ptr jpeg_info,Image *image,
             custom_profile),(unsigned int) (length+tag_length+roundup));
         }
       }
-    if (LocaleCompare(name,"XMP") == 0)
+   if ((LocaleCompare(name,"XMP") == 0) &&
+       (GetStringInfoLength(profile) <= 65502))
       {
         StringInfo
           *xmp_profile;
@@ -2072,12 +2172,12 @@ static void WriteProfile(j_compress_ptr jpeg_info,Image *image,
         /*
           Add namespace to XMP profile.
         */
-        xmp_profile=StringToStringInfo("http://ns.adobe.com/xap/1.0/ ");
+        xmp_profile=StringToStringInfo(xmp_namespace);
         if (xmp_profile != (StringInfo *) NULL)
           {
             if (profile != (StringInfo *) NULL)
               ConcatenateStringInfo(xmp_profile,profile);
-            GetStringInfoDatum(xmp_profile)[28]='\0';
+            GetStringInfoDatum(xmp_profile)[XmpNamespaceExtent]='\0';
             for (i=0; i < (ssize_t) GetStringInfoLength(xmp_profile); i+=65533L)
             {
               length=MagickMin(GetStringInfoLength(xmp_profile)-i,65533L);
@@ -2087,8 +2187,9 @@ static void WriteProfile(j_compress_ptr jpeg_info,Image *image,
             xmp_profile=DestroyStringInfo(xmp_profile);
           }
       }
-    (void) LogMagickEvent(CoderEvent,GetMagickModule(),
-      "%s profile: %.20g bytes",name,(double) GetStringInfoLength(profile));
+    if (image->debug != MagickFalse)
+      (void) LogMagickEvent(CoderEvent,GetMagickModule(),
+        "%s profile: %.20g bytes",name,(double) GetStringInfoLength(profile));
     name=GetNextImageProfile(image);
   }
   custom_profile=DestroyStringInfo(custom_profile);
@@ -2157,6 +2258,7 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
   Image *image,ExceptionInfo *exception)
 {
   const char
+    *dct_method,
     *option,
     *sampling_factor,
     *value;
@@ -2312,33 +2414,32 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
       if (image->units == PixelsPerCentimeterResolution)
         jpeg_info.density_unit=(UINT8) 2;
     }
-  jpeg_info.dct_method=JDCT_FLOAT;
-  option=GetImageOption(image_info,"jpeg:dct-method");
-  if (option != (const char *) NULL)
-    switch (*option)
+  dct_method=GetImageOption(image_info,"jpeg:dct-method");
+  if (dct_method != (const char *) NULL)
+    switch (*dct_method)
     {
       case 'D':
       case 'd':
       {
-        if (LocaleCompare(option,"default") == 0)
+        if (LocaleCompare(dct_method,"default") == 0)
           jpeg_info.dct_method=JDCT_DEFAULT;
         break;
       }
       case 'F':
       case 'f':
       {
-        if (LocaleCompare(option,"fastest") == 0)
+        if (LocaleCompare(dct_method,"fastest") == 0)
           jpeg_info.dct_method=JDCT_FASTEST;
-        if (LocaleCompare(option,"float") == 0)
+        if (LocaleCompare(dct_method,"float") == 0)
           jpeg_info.dct_method=JDCT_FLOAT;
         break;
       }
       case 'I':
       case 'i':
       {
-        if (LocaleCompare(option,"ifast") == 0)
+        if (LocaleCompare(dct_method,"ifast") == 0)
           jpeg_info.dct_method=JDCT_IFAST;
-        if (LocaleCompare(option,"islow") == 0)
+        if (LocaleCompare(dct_method,"islow") == 0)
           jpeg_info.dct_method=JDCT_ISLOW;
         break;
       }
@@ -2365,6 +2466,14 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
           jpeg_info.optimize_coding=status == MagickFalse ? FALSE : TRUE;
         }
     }
+#if defined(C_ARITH_CODING_SUPPORTED)
+  option=GetImageOption(image_info,"jpeg:arithmetic-coding");
+  if (IsStringTrue(option) != MagickFalse)
+    {
+      jpeg_info.arith_code=TRUE;
+      jpeg_info.optimize_coding=FALSE; // Not supported.
+    }
+#endif
 #if (JPEG_LIB_VERSION >= 61) && defined(C_PROGRESSIVE_SUPPORTED)
   if ((LocaleCompare(image_info->magick,"PJPEG") == 0) ||
       (image_info->interlace != NoInterlace))
@@ -2472,6 +2581,8 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
       extent_info=DestroyImageInfo(extent_info);
     }
   jpeg_set_quality(&jpeg_info,quality,TRUE);
+  if ((dct_method == (const char *) NULL) && (quality <= 90))
+    jpeg_info.dct_method=JDCT_IFAST;
 #if (JPEG_LIB_VERSION >= 70)
   option=GetImageOption(image_info,"quality");
   if (option != (const char *) NULL)
@@ -2503,7 +2614,7 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
   if (value != (char *) NULL)
     colorspace=StringToInteger(value);
   sampling_factor=(const char *) NULL;
-  if (colorspace == jpeg_info.in_color_space)
+  if ((J_COLOR_SPACE) colorspace == jpeg_info.in_color_space)
     {
       value=GetImageOption(image_info,"jpeg:sampling-factor");
       if (value == (char *) NULL)
@@ -2732,9 +2843,15 @@ static MagickBooleanType WriteJPEGImage(const ImageInfo *image_info,
   */
   value=GetImageProperty(image,"comment",exception);
   if (value != (char *) NULL)
-    for (i=0; i < (ssize_t) strlen(value); i+=65533L)
-      jpeg_write_marker(&jpeg_info,JPEG_COM,(unsigned char *) value+i,
-        (unsigned int) MagickMin((size_t) strlen(value+i),65533L));
+    {
+      size_t
+        length;
+
+      length=strlen(value);
+      for (i=0; i < (ssize_t) length; i+=65533L)
+        jpeg_write_marker(&jpeg_info,JPEG_COM,(unsigned char *) value+i,
+          (unsigned int) MagickMin((size_t) strlen(value+i),65533L));
+    }
   if (image->profiles != (void *) NULL)
     WriteProfile(&jpeg_info,image,exception);
   /*

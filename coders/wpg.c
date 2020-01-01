@@ -16,13 +16,13 @@
 %                                 June 2000                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -306,7 +306,6 @@ static MagickBooleanType InsertRow(Image *image,unsigned char *p,ssize_t y,
               SetPixelIndex(image,index,q);
               if (index < image->colors)
                 SetPixelViaPixelInfo(image,image->colormap+(ssize_t) index,q);
-              SetPixelViaPixelInfo(image,image->colormap+(ssize_t) index,q);
               q+=GetPixelChannels(image);
             }
             p++;
@@ -834,8 +833,8 @@ static Image *ExtractPostscript(Image *image,const ImageInfo *image_info,
   if(magic_info == (const MagicInfo *) NULL) goto FINISH_UNL;
   /*     printf("Detected:%s  \n",magic_info->name); */
   if(exception->severity != UndefinedException) goto FINISH_UNL;
-  if(magic_info->name == (char *) NULL) goto FINISH_UNL;
-  (void) strncpy(clone_info->magick,magic_info->name,MagickPathExtent-1);
+  (void) strncpy(clone_info->magick,GetMagicName(magic_info),
+    MagickPathExtent-1);
   if (LocaleCompare(clone_info->magick,"PFB") != 0)
     {      
       ThrowException(exception,CorruptImageError,"ImproperImageHeader",
@@ -1102,6 +1101,7 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
   image->columns = 1;
   image->rows = 1;
   image->colors = 0;
+  image->storage_class=DirectClass;
   (void) ResetImagePixels(image,exception);
   bpp=0;
   BitmapHeader2.RotAngle=0;
@@ -1160,7 +1160,7 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
               if (WPG_Palette.StartIndex > WPG_Palette.NumOfEntries)
                 ThrowReaderException(CorruptImageError,"InvalidColormapIndex");
               image->colors=WPG_Palette.NumOfEntries;
-              if (!AcquireImageColormap(image,image->colors,exception))
+              if (AcquireImageColormap(image,image->colors,exception) == MagickFalse)
                 goto NoMemory;
               for (i=WPG_Palette.StartIndex;
                    i < (int)WPG_Palette.NumOfEntries; i++)
@@ -1245,10 +1245,28 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
               else
                 {
                   if (bpp < 24)
-                    if ( (image->colors < (one << bpp)) && (bpp != 24) )
-                      image->colormap=(PixelInfo *) ResizeQuantumMemory(
-                        image->colormap,(size_t) (one << bpp),
-                        sizeof(*image->colormap));
+                  if ( (image->colors < (one << bpp)) && (bpp != 24) )
+                    {
+                      PixelInfo
+                        *colormap;
+
+                      size_t
+                        colors;
+
+                      colormap=image->colormap;
+                      colors=image->colors;
+                      image->colormap=(PixelInfo *) NULL;
+                      if (AcquireImageColormap(image,one << bpp,exception) == MagickFalse)
+                        {
+                          colormap=(PixelInfo *)
+                            RelinquishMagickMemory(colormap);
+                          goto NoMemory;
+                        }
+                      (void) memcpy(image->colormap,colormap,MagickMin(
+                        image->colors,colors)*sizeof(*image->colormap));
+                      colormap=(PixelInfo *)
+                        RelinquishMagickMemory(colormap);
+                    }
                 }
 
               if ((bpp == 1) && (image->colors > 1))
@@ -1316,6 +1334,10 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
                 }
 
               /* Allocate next image structure. */
+              if ((image_info->ping != MagickFalse) &&
+                  (image_info->number_scenes != 0))
+                if (image->scene >= (image_info->scene+image_info->number_scenes-1))
+                  goto Finish;
               AcquireNextImage(image_info,image,exception);
               image->depth=8;
               if (image->next == (Image *) NULL)
@@ -1519,6 +1541,10 @@ static Image *ReadWPGImage(const ImageInfo *image_info,
 
 
               /* Allocate next image structure. */
+              if ((image_info->ping != MagickFalse) &&
+                  (image_info->number_scenes != 0))
+                if (image->scene >= (image_info->scene+image_info->number_scenes-1))
+                  goto Finish;
               AcquireNextImage(image_info,image,exception);
               image->depth=8;
               if (image->next == (Image *) NULL)

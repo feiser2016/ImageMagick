@@ -19,13 +19,13 @@
 %                               December 2001                                 %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -98,7 +98,6 @@
 #      include <win32config.h>
 #    endif
 #  endif
-#  include <libxml/parser.h>
 #  include <libxml/xmlmemory.h>
 #  include <libxml/parserInternals.h>
 #  include <libxml/xmlerror.h>
@@ -545,6 +544,13 @@ static void MSLEndDocument(void *context)
   msl_info=(MSLInfo *) context;
   if (msl_info->content != (char *) NULL)
     msl_info->content=DestroyString(msl_info->content);
+#if defined(MAGICKCORE_XML_DELEGATE)
+  if (msl_info->document != (xmlDocPtr) NULL)
+    {
+      xmlFreeDoc(msl_info->document);
+      msl_info->document=(xmlDocPtr) NULL;
+    }
+#endif
 }
 
 static void MSLPushImage(MSLInfo *msl_info,Image *image)
@@ -6158,8 +6164,8 @@ static void MSLStartElement(void *context,const xmlChar *tag,
             {
               if (LocaleCompare(keyword, "opacity") == 0)
                 {
-                  ssize_t  opac = OpaqueAlpha,
-                  len = (ssize_t) strlen( value );
+                  Quantum  opac = OpaqueAlpha;
+                  ssize_t len = (ssize_t) strlen( value );
 
                   if (value[len-1] == '%') {
                     char  tmp[100];
@@ -7625,6 +7631,9 @@ static void MSLComment(void *context,const xmlChar *value)
 }
 
 static void MSLWarning(void *context,const char *format,...)
+  magick_attribute((__format__ (__printf__,2,3)));
+
+static void MSLWarning(void *context,const char *format,...)
 {
   char
     *message,
@@ -7655,6 +7664,9 @@ static void MSLWarning(void *context,const char *format,...)
   message=DestroyString(message);
   va_end(operands);
 }
+
+static void MSLError(void *context,const char *format,...)
+  magick_attribute((__format__ (__printf__,2,3)));
 
 static void MSLError(void *context,const char *format,...)
 {
@@ -7690,8 +7702,8 @@ static void MSLCDataBlock(void *context,const xmlChar *value,int length)
   MSLInfo
     *msl_info;
 
-   xmlNodePtr
-     child;
+  xmlNodePtr
+    child;
 
   xmlParserCtxtPtr
     parser;
@@ -7710,7 +7722,9 @@ static void MSLCDataBlock(void *context,const xmlChar *value,int length)
       xmlTextConcat(child,value,length);
       return;
     }
-  (void) xmlAddChild(parser->node,xmlNewCDataBlock(parser->myDoc,value,length));
+  child=xmlNewCDataBlock(parser->myDoc,value,length);
+  if (xmlAddChild(parser->node,child) == (xmlNodePtr) NULL)
+    xmlFreeNode(child);
 }
 
 static void MSLExternalSubset(void *context,const xmlChar *name,
@@ -7857,6 +7871,7 @@ static MagickBooleanType ProcessMSLScript(const ImageInfo *image_info,
   *msl_info.image=msl_image;
   if (*image != (Image *) NULL)
     MSLPushImage(&msl_info,*image);
+  xmlInitParser();
   (void) xmlSubstituteEntitiesDefault(1);
   (void) memset(&sax_modules,0,sizeof(sax_modules));
   sax_modules.internalSubset=MSLInternalSubset;
@@ -7906,6 +7921,8 @@ static MagickBooleanType ProcessMSLScript(const ImageInfo *image_info,
   /*
     Free resources.
   */
+  if (msl_info.parser->myDoc != (xmlDocPtr) NULL)
+    xmlFreeDoc(msl_info.parser->myDoc);
   xmlFreeParserCtxt(msl_info.parser);
   (void) LogMagickEvent(CoderEvent,GetMagickModule(),"end SAX");
   if (*image == (Image *) NULL)
@@ -7982,9 +7999,6 @@ ModuleExport size_t RegisterMSLImage(void)
   MagickInfo
     *entry;
 
-#if defined(MAGICKCORE_XML_DELEGATE)
-  xmlInitParser();
-#endif
   entry=AcquireMagickInfo("MSL","MSL","Magick Scripting Language");
 #if defined(MAGICKCORE_XML_DELEGATE)
   entry->decoder=(DecodeImageHandler *) ReadMSLImage;
@@ -8305,9 +8319,6 @@ static MagickBooleanType SetMSLAttributes(MSLInfo *msl_info,const char *keyword,
 ModuleExport void UnregisterMSLImage(void)
 {
   (void) UnregisterMagickInfo("MSL");
-#if defined(MAGICKCORE_XML_DELEGATE)
-  xmlCleanupParser();
-#endif
 }
 
 #if defined(MAGICKCORE_XML_DELEGATE)
@@ -8344,6 +8355,9 @@ static MagickBooleanType WriteMSLImage(const ImageInfo *image_info,Image *image,
   Image
     *msl_image;
 
+  MagickBooleanType
+    status;
+
   assert(image_info != (const ImageInfo *) NULL);
   assert(image_info->signature == MagickCoreSignature);
   assert(image != (Image *) NULL);
@@ -8351,6 +8365,7 @@ static MagickBooleanType WriteMSLImage(const ImageInfo *image_info,Image *image,
   if (image->debug != MagickFalse)
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   msl_image=CloneImage(image,0,0,MagickTrue,exception);
-  return(ProcessMSLScript(image_info,&msl_image,exception));
+  status=ProcessMSLScript(image_info,&msl_image,exception);
+  return(status);
 }
 #endif

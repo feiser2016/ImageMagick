@@ -17,13 +17,13 @@
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -120,21 +120,6 @@ static Image *ReadXCImage(const ImageInfo *image_info,ExceptionInfo *exception)
   assert(exception != (ExceptionInfo *) NULL);
   assert(exception->signature == MagickCoreSignature);
   image=AcquireImage(image_info,exception);
-  if ((image_info->extract != (char *) NULL) &&
-      (image->columns == 0) && (image->rows == 0))
-    {
-      RectangleInfo
-        geometry;
-
-      int
-        flags;
-
-      flags=ParseAbsoluteGeometry(image_info->extract,&geometry);
-      if ((flags & WidthValue) != 0)
-        image->columns=geometry.width;
-      if ((flags & HeightValue) != 0)
-        image->rows=geometry.height;
-    }
   if (image->columns == 0)
     image->columns=1;
   if (image->rows == 0)

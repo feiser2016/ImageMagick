@@ -17,13 +17,13 @@
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -67,6 +67,7 @@
 #include "MagickCore/statistic.h"
 #include "MagickCore/string_.h"
 #include "MagickCore/module.h"
+#include "coders/txt.h"
 
 /*
   Forward declarations.
@@ -101,8 +102,6 @@ static MagickBooleanType
 */
 static MagickBooleanType IsTXT(const unsigned char *magick,const size_t length)
 {
-#define MagickID  "# ImageMagick pixel enumeration:"
-
   char
     colorspace[MagickPathExtent];
 
@@ -116,7 +115,8 @@ static MagickBooleanType IsTXT(const unsigned char *magick,const size_t length)
 
   if (length < 40)
     return(MagickFalse);
-  if (LocaleNCompare((const char *) magick,MagickID,strlen(MagickID)) != 0)
+  if (LocaleNCompare((const char *) magick,MagickTXTID,
+        strlen(MagickTXTID)) != 0)
     return(MagickFalse);
   count=(ssize_t) sscanf((const char *) magick+32,"%lu,%lu,%lu,%32s",&columns,
     &rows,&depth,colorspace);
@@ -387,6 +387,7 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
     text[MagickPathExtent];
 
   double
+    max_value,
     x_offset,
     y_offset;
 
@@ -417,7 +418,6 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
   unsigned long
     depth,
     height,
-    max_value,
     width;
 
   /*
@@ -439,7 +439,7 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
     }
   (void) memset(text,0,sizeof(text));
   (void) ReadBlobString(image,text);
-  if (LocaleNCompare((char *) text,MagickID,strlen(MagickID)) != 0)
+  if (LocaleNCompare((char *) text,MagickTXTID,strlen(MagickTXTID)) != 0)
     ThrowReaderException(CorruptImageError,"ImproperImageHeader");
   x_offset=(-1.0);
   y_offset=(-1.0);
@@ -447,17 +447,17 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
   {
     width=0;
     height=0;
-    max_value=0;
+    max_value=0.0;
     *colorspace='\0';
-    count=(ssize_t) sscanf(text+32,"%lu,%lu,%lu,%32s",&width,&height,&max_value,
+    count=(ssize_t) sscanf(text+32,"%lu,%lu,%lf,%32s",&width,&height,&max_value,
       colorspace);
-    if ((count != 4) || (width == 0) || (height == 0) || (max_value == 0))
+    if ((count != 4) || (width == 0) || (height == 0) || (max_value == 0.0))
       ThrowReaderException(CorruptImageError,"ImproperImageHeader");
     image->columns=width;
     image->rows=height;
-    if ((max_value == 0) || (max_value > 4294967295UL))
+    if ((max_value == 0.0) || (max_value > 18446744073709551615.0))
       ThrowReaderException(CorruptImageError,"ImproperImageHeader");
-    for (depth=1; (GetQuantumRange(depth)+1) < max_value; depth++) ;
+    for (depth=1; (GetQuantumRange(depth)+1.0) < max_value; depth++) ;
     image->depth=depth;
     status=SetImageExtent(image,image->columns,image->rows,exception);
     if (status != MagickFalse)
@@ -563,16 +563,16 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
             green+=(range+1)/2.0;
             blue+=(range+1)/2.0;
           }
-        pixel.red=(MagickRealType) ScaleAnyToQuantum((QuantumAny) (red+0.5),
-          range);
-        pixel.green=(MagickRealType) ScaleAnyToQuantum((QuantumAny) (green+0.5),
-          range);
-        pixel.blue=(MagickRealType) ScaleAnyToQuantum((QuantumAny) (blue+0.5),
-          range);
-        pixel.black=(MagickRealType) ScaleAnyToQuantum((QuantumAny) (black+0.5),
-          range);
-        pixel.alpha=(MagickRealType) ScaleAnyToQuantum((QuantumAny) (alpha+0.5),
-          range);
+        pixel.red=(MagickRealType) ScaleAnyToQuantum((QuantumAny)
+          MagickMax(red+0.5,0.0),range);
+        pixel.green=(MagickRealType) ScaleAnyToQuantum((QuantumAny)
+          MagickMax(green+0.5,0.0),range);
+        pixel.blue=(MagickRealType) ScaleAnyToQuantum((QuantumAny)
+          MagickMax(blue+0.5,0.0),range);
+        pixel.black=(MagickRealType) ScaleAnyToQuantum((QuantumAny)
+          MagickMax(black+0.5,0.0),range);
+        pixel.alpha=(MagickRealType) ScaleAnyToQuantum((QuantumAny)
+          MagickMax(alpha+0.5,0.0),range);
         q=GetAuthenticPixels(image,(ssize_t) x_offset,(ssize_t) y_offset,1,1,
           exception);
         if (q == (Quantum *) NULL)
@@ -589,7 +589,7 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
       break;
     *text='\0';
     (void) ReadBlobString(image,text);
-    if (LocaleNCompare((char *) text,MagickID,strlen(MagickID)) == 0)
+    if (LocaleNCompare((char *) text,MagickTXTID,strlen(MagickTXTID)) == 0)
       {
         /*
           Allocate next image structure.
@@ -606,7 +606,7 @@ static Image *ReadTXTImage(const ImageInfo *image_info,ExceptionInfo *exception)
         if (status == MagickFalse)
           break;
       }
-  } while (LocaleNCompare((char *) text,MagickID,strlen(MagickID)) == 0);
+  } while (LocaleNCompare((char *) text,MagickTXTID,strlen(MagickTXTID)) == 0);
   (void) CloseBlob(image);
   if (status == MagickFalse)
     return(DestroyImageList(image));
@@ -784,8 +784,8 @@ static MagickBooleanType WriteTXTImage(const ImageInfo *image_info,Image *image,
           MAGICKCORE_QUANTUM_DEPTH;
         (void) FormatLocaleString(buffer,MagickPathExtent,
           "# ImageMagick pixel enumeration: %.20g,%.20g,%.20g,%s\n",(double)
-          image->columns,(double) image->rows,(double) ((MagickOffsetType)
-          GetQuantumRange(depth)),colorspace);
+          image->columns,(double) image->rows,(double) GetQuantumRange(depth),
+          colorspace);
         (void) WriteBlobString(image,buffer);
       }
     GetPixelInfo(image,&pixel);
@@ -797,11 +797,6 @@ static MagickBooleanType WriteTXTImage(const ImageInfo *image_info,Image *image,
       for (x=0; x < (ssize_t) image->columns; x++)
       {
         GetPixelInfoPixel(image,p,&pixel);
-        if (pixel.colorspace == LabColorspace)
-          {
-            pixel.green-=(QuantumRange+1)/2.0;
-            pixel.blue-=(QuantumRange+1)/2.0;
-          }
         if (LocaleCompare(image_info->magick,"SPARSE-COLOR") == 0)
           {
             /*

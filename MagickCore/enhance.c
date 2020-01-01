@@ -17,13 +17,13 @@
 %                                 July 1992                                   %
 %                                                                             %
 %                                                                             %
-%  Copyright 1999-2018 ImageMagick Studio LLC, a non-profit organization      %
+%  Copyright 1999-2020 ImageMagick Studio LLC, a non-profit organization      %
 %  dedicated to making software imaging solutions freely available.           %
 %                                                                             %
 %  You may not use this file except in compliance with the License.  You may  %
 %  obtain a copy of the License at                                            %
 %                                                                             %
-%    https://www.imagemagick.org/script/license.php                           %
+%    https://imagemagick.org/script/license.php                               %
 %                                                                             %
 %  Unless required by applicable law or agreed to in writing, software        %
 %  distributed under the License is distributed on an "AS IS" BASIS,          %
@@ -256,6 +256,539 @@ MagickExport MagickBooleanType BrightnessContrastImage(Image *image,
 %                                                                             %
 %                                                                             %
 %                                                                             %
+%     C L A H E I m a g e                                                     %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  CLAHEImage() is a variant of adaptive histogram equalization in which the
+%  contrast amplification is limited, so as to reduce this problem of noise
+%  amplification.
+%
+%  Adapted from implementation by Karel Zuiderveld, karel@cv.ruu.nl in
+%  "Graphics Gems IV", Academic Press, 1994.
+%
+%  The format of the CLAHEImage method is:
+%
+%      MagickBooleanType CLAHEImage(Image *image,const size_t width,
+%        const size_t height,const size_t number_bins,const double clip_limit,
+%        ExceptionInfo *exception)
+%
+%  A description of each parameter follows:
+%
+%    o image: the image.
+%
+%    o width: the width of the tile divisions to use in horizontal direction.
+%
+%    o height: the height of the tile divisions to use in vertical direction.
+%
+%    o number_bins: number of bins for histogram ("dynamic range").
+%
+%    o clip_limit: contrast limit for localised changes in contrast. A limit
+%      less than 1 results in standard non-contrast limited AHE.
+%
+%    o exception: return any errors or warnings in this structure.
+%
+*/
+
+typedef struct _RangeInfo
+{
+  unsigned short
+    min,
+    max;
+} RangeInfo;
+
+static void ClipCLAHEHistogram(const double clip_limit,const size_t number_bins,
+  size_t *histogram)
+{
+#define NumberCLAHEGrays  (65536)
+
+  register ssize_t
+    i;
+
+  size_t
+    cumulative_excess,
+    previous_excess,
+    step;
+
+  ssize_t
+    excess;
+
+  /*
+    Compute total number of excess pixels.
+  */
+  cumulative_excess=0;
+  for (i=0; i < (ssize_t) number_bins; i++)
+  {
+    excess=(ssize_t) histogram[i]-(ssize_t) clip_limit;
+    if (excess > 0)
+      cumulative_excess+=excess;
+  }
+  /*
+    Clip histogram and redistribute excess pixels across all bins.
+  */
+  step=cumulative_excess/number_bins;
+  excess=(ssize_t) (clip_limit-step);
+  for (i=0; i < (ssize_t) number_bins; i++)
+  {
+    if ((double) histogram[i] > clip_limit)
+      histogram[i]=(size_t) clip_limit;
+    else
+      if ((ssize_t) histogram[i] > excess)
+        {
+          cumulative_excess-=histogram[i]-excess;
+          histogram[i]=(size_t) clip_limit;
+        }
+      else
+        {
+          cumulative_excess-=step;
+          histogram[i]+=step;
+        }
+  }
+  /*
+    Redistribute remaining excess.
+  */
+  do
+  {
+    register size_t
+      *p;
+
+    size_t
+      *q;
+
+    previous_excess=cumulative_excess;
+    p=histogram;
+    q=histogram+number_bins;
+    while ((cumulative_excess != 0) && (p < q))
+    {
+      step=number_bins/cumulative_excess;
+      if (step < 1)
+        step=1;
+      for (p=histogram; (p < q) && (cumulative_excess != 0); p+=step)
+        if ((double) *p < clip_limit)
+          {
+            (*p)++;
+            cumulative_excess--;
+          }
+      p++;
+    }
+  } while ((cumulative_excess != 0) && (cumulative_excess < previous_excess));
+}
+
+static void GenerateCLAHEHistogram(const RectangleInfo *clahe_info,
+  const RectangleInfo *tile_info,const size_t number_bins,
+  const unsigned short *lut,const unsigned short *pixels,size_t *histogram)
+{
+  register const unsigned short
+    *p;
+
+  register ssize_t
+    i;
+
+  /*
+    Classify the pixels into a gray histogram.
+  */
+  for (i=0; i < (ssize_t) number_bins; i++)
+    histogram[i]=0L;
+  p=pixels;
+  for (i=0; i < (ssize_t) tile_info->height; i++)
+  {
+    const unsigned short
+      *q;
+
+    q=p+tile_info->width;
+    while (p < q)
+      histogram[lut[*p++]]++;
+    q+=clahe_info->width;
+    p=q-tile_info->width;
+  }
+}
+
+static void InterpolateCLAHE(const RectangleInfo *clahe_info,const size_t *Q12,
+  const size_t *Q22,const size_t *Q11,const size_t *Q21,
+  const RectangleInfo *tile,const unsigned short *lut,unsigned short *pixels)
+{
+  ssize_t
+    y;
+
+  unsigned short
+    intensity;
+
+  /*
+    Bilinear interpolate four tiles to eliminate boundary artifacts.
+  */
+  for (y=(ssize_t) tile->height; y > 0; y--)
+  {
+    register ssize_t
+      x;
+
+    for (x=(ssize_t) tile->width; x > 0; x--)
+    {
+      intensity=lut[*pixels];
+      *pixels++=(unsigned short ) (PerceptibleReciprocal((double) tile->width*
+        tile->height)*(y*(x*Q12[intensity]+(tile->width-x)*Q22[intensity])+
+        (tile->height-y)*(x*Q11[intensity]+(tile->width-x)*Q21[intensity])));
+    }
+    pixels+=(clahe_info->width-tile->width);
+  }
+}
+
+static void GenerateCLAHELut(const RangeInfo *range_info,
+  const size_t number_bins,unsigned short *lut)
+{
+  ssize_t
+    i;
+
+  unsigned short
+    delta;
+
+  /*
+    Scale input image [intensity min,max] to [0,number_bins-1].
+  */
+  delta=(unsigned short) ((range_info->max-range_info->min)/number_bins+1);
+  for (i=(ssize_t) range_info->min; i <= (ssize_t) range_info->max; i++)
+    lut[i]=(unsigned short) ((i-range_info->min)/delta);
+}
+
+static void MapCLAHEHistogram(const RangeInfo *range_info,
+  const size_t number_bins,const size_t number_pixels,size_t *histogram)
+{
+  double
+    scale,
+    sum;
+
+  register ssize_t
+    i;
+
+  /*
+    Rescale histogram to range [min-intensity .. max-intensity].
+  */
+  scale=(double) (range_info->max-range_info->min)/number_pixels;
+  sum=0.0;
+  for (i=0; i < (ssize_t) number_bins; i++)
+  {
+    sum+=histogram[i];
+    histogram[i]=(size_t) (range_info->min+scale*sum);
+    if (histogram[i] > range_info->max)
+      histogram[i]=range_info->max;
+  }
+}
+
+static MagickBooleanType CLAHE(const RectangleInfo *clahe_info,
+  const RectangleInfo *tile_info,const RangeInfo *range_info,
+  const size_t number_bins,const double clip_limit,unsigned short *pixels)
+{
+  MemoryInfo
+    *tile_cache;
+
+  register unsigned short
+    *p;
+
+  size_t
+    limit,
+    *tiles;
+
+  ssize_t
+    y;
+
+  unsigned short
+    *lut;
+
+  /*
+    Constrast limited adapted histogram equalization.
+  */
+  if (clip_limit == 1.0)
+    return(MagickTrue);
+  tile_cache=AcquireVirtualMemory((size_t) clahe_info->x*clahe_info->y,
+    number_bins*sizeof(*tiles));
+  if (tile_cache == (MemoryInfo *) NULL)
+    return(MagickFalse);
+  lut=AcquireQuantumMemory(NumberCLAHEGrays,sizeof(*lut));
+  if (lut == (unsigned short *) NULL)
+    {
+      tile_cache=RelinquishVirtualMemory(tile_cache);
+      return(MagickFalse);
+    }
+  tiles=(size_t *) GetVirtualMemoryBlob(tile_cache);
+  limit=(size_t) (clip_limit*(tile_info->width*tile_info->height)/number_bins);
+  if (limit < 1UL)
+    limit=1UL;
+  /*
+    Generate greylevel mappings for each tile.
+  */
+  GenerateCLAHELut(range_info,number_bins,lut);
+  p=pixels;
+  for (y=0; y < (ssize_t) clahe_info->y; y++)
+  {
+    register ssize_t
+      x;
+
+    for (x=0; x < (ssize_t) clahe_info->x; x++)
+    {
+      size_t
+        *histogram;
+
+      histogram=tiles+(number_bins*(y*clahe_info->x+x));
+      GenerateCLAHEHistogram(clahe_info,tile_info,number_bins,lut,p,histogram);
+      ClipCLAHEHistogram((double) limit,number_bins,histogram);
+      MapCLAHEHistogram(range_info,number_bins,tile_info->width*
+        tile_info->height,histogram);
+      p+=tile_info->width;
+    }
+    p+=clahe_info->width*(tile_info->height-1);
+  }
+  /*
+    Interpolate greylevel mappings to get CLAHE image.
+  */
+  p=pixels;
+  for (y=0; y <= (ssize_t) clahe_info->y; y++)
+  {
+    OffsetInfo
+      offset;
+
+    RectangleInfo
+      tile;
+
+    register ssize_t
+      x;
+
+    tile.height=tile_info->height;
+    tile.y=y-1;
+    offset.y=tile.y+1;
+    if (y == 0)
+      {
+        /*
+          Top row.
+        */
+        tile.height=tile_info->height >> 1;
+        tile.y=0;
+        offset.y=0;
+      }
+    else
+      if (y == (ssize_t) clahe_info->y)
+        {
+          /*
+            Bottom row.
+          */
+          tile.height=(tile_info->height+1) >> 1;
+          tile.y=clahe_info->y-1;
+          offset.y=tile.y;
+        }
+    for (x=0; x <= (ssize_t) clahe_info->x; x++)
+    {
+      tile.width=tile_info->width;
+      tile.x=x-1;
+      offset.x=tile.x+1;
+      if (x == 0)
+        {
+          /*
+            Left column.
+          */
+          tile.width=tile_info->width >> 1;
+          tile.x=0;
+          offset.x=0;
+        }
+      else
+        if (x == (ssize_t) clahe_info->x)
+          {
+            /*
+              Right column.
+            */
+            tile.width=(tile_info->width+1) >> 1;
+            tile.x=clahe_info->x-1;
+            offset.x=tile.x;
+          }
+      InterpolateCLAHE(clahe_info,
+        tiles+(number_bins*(tile.y*clahe_info->x+tile.x)),     /* Q12 */
+        tiles+(number_bins*(tile.y*clahe_info->x+offset.x)),   /* Q22 */
+        tiles+(number_bins*(offset.y*clahe_info->x+tile.x)),   /* Q11 */
+        tiles+(number_bins*(offset.y*clahe_info->x+offset.x)), /* Q21 */
+        &tile,lut,p);
+      p+=tile.width;
+    }
+    p+=clahe_info->width*(tile.height-1);
+  }
+  lut=RelinquishMagickMemory(lut);
+  tile_cache=RelinquishVirtualMemory(tile_cache);
+  return(MagickTrue);
+}
+
+MagickExport MagickBooleanType CLAHEImage(Image *image,const size_t width,
+  const size_t height,const size_t number_bins,const double clip_limit,
+  ExceptionInfo *exception)
+{
+#define CLAHEImageTag  "CLAHE/Image"
+
+  CacheView
+    *image_view;
+
+  ColorspaceType
+    colorspace;
+
+  MagickBooleanType
+    status;
+
+  MagickOffsetType
+    progress;
+
+  MemoryInfo
+    *pixel_cache;
+
+  RangeInfo
+    range_info;
+
+  RectangleInfo
+    clahe_info,
+    tile_info;
+
+  size_t
+    n;
+
+  ssize_t
+    y;
+
+  unsigned short
+    *pixels;
+
+  /*
+    Configure CLAHE parameters.
+  */
+  assert(image != (Image *) NULL);
+  assert(image->signature == MagickCoreSignature);
+  if (image->debug != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  range_info.min=0;
+  range_info.max=NumberCLAHEGrays-1;
+  tile_info.width=width;
+  if (tile_info.width == 0)
+    tile_info.width=image->columns >> 3;
+  tile_info.height=height;
+  if (tile_info.height == 0)
+    tile_info.height=image->rows >> 3;
+  tile_info.x=0;
+  if ((image->columns % tile_info.width) != 0)
+    tile_info.x=(ssize_t) tile_info.width-(image->columns % tile_info.width);
+  tile_info.y=0;
+  if ((image->rows % tile_info.height) != 0)
+    tile_info.y=(ssize_t) tile_info.height-(image->rows % tile_info.height);
+  clahe_info.width=image->columns+tile_info.x;
+  clahe_info.height=image->rows+tile_info.y;
+  clahe_info.x=(ssize_t) clahe_info.width/tile_info.width;
+  clahe_info.y=(ssize_t) clahe_info.height/tile_info.height;
+  pixel_cache=AcquireVirtualMemory(clahe_info.width,clahe_info.height*
+    sizeof(*pixels));
+  if (pixel_cache == (MemoryInfo *) NULL)
+    ThrowBinaryException(ResourceLimitError,"MemoryAllocationFailed",
+      image->filename);
+  pixels=(unsigned short *) GetVirtualMemoryBlob(pixel_cache);
+  colorspace=image->colorspace;
+  if (TransformImageColorspace(image,LabColorspace,exception) == MagickFalse)
+    {
+      pixel_cache=RelinquishVirtualMemory(pixel_cache);
+      return(MagickFalse);
+    }
+  /*
+    Initialize CLAHE pixels.
+  */
+  image_view=AcquireVirtualCacheView(image,exception);
+  progress=0;
+  status=MagickTrue;
+  n=0;
+  for (y=0; y < (ssize_t) clahe_info.height; y++)
+  {
+    register const Quantum
+      *magick_restrict p;
+
+    register ssize_t
+      x;
+
+    if (status == MagickFalse)
+      continue;
+    p=GetCacheViewVirtualPixels(image_view,-(tile_info.x >> 1),y-
+      (tile_info.y >> 1),clahe_info.width,1,exception);
+    if (p == (const Quantum *) NULL)
+      {
+        status=MagickFalse;
+        continue;
+      }
+    for (x=0; x < (ssize_t) clahe_info.width; x++)
+    {
+      pixels[n++]=ScaleQuantumToShort(p[0]);
+      p+=GetPixelChannels(image);
+    }
+    if (image->progress_monitor != (MagickProgressMonitor) NULL)
+      {
+        MagickBooleanType
+          proceed;
+
+        progress++;
+        proceed=SetImageProgress(image,CLAHEImageTag,progress,2*
+          GetPixelChannels(image));
+        if (proceed == MagickFalse)
+          status=MagickFalse;
+      }
+  }
+  image_view=DestroyCacheView(image_view);
+  status=CLAHE(&clahe_info,&tile_info,&range_info,number_bins == 0 ?
+    (size_t) 128 : MagickMin(number_bins,256),clip_limit,pixels);
+  if (status == MagickFalse)
+    (void) ThrowMagickException(exception,GetMagickModule(),
+      ResourceLimitError,"MemoryAllocationFailed","`%s'",image->filename);
+  /*
+    Push CLAHE pixels to CLAHE image.
+  */
+  image_view=AcquireAuthenticCacheView(image,exception);
+  n=clahe_info.width*(tile_info.y >> 1);
+  for (y=0; y < (ssize_t) image->rows; y++)
+  {
+    register Quantum
+      *magick_restrict q;
+
+    register ssize_t
+      x;
+
+    if (status == MagickFalse)
+      continue;
+    q=GetCacheViewAuthenticPixels(image_view,0,y,image->columns,1,exception);
+    if (q == (Quantum *) NULL)
+      {
+        status=MagickFalse;
+        continue;
+      }
+    n+=tile_info.x >> 1;
+    for (x=0; x < (ssize_t) image->columns; x++)
+    {
+      q[0]=ScaleShortToQuantum(pixels[n++]);
+      q+=GetPixelChannels(image);
+    }
+    n+=(clahe_info.width-image->columns-(tile_info.x >> 1));
+    if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
+      status=MagickFalse;
+    if (image->progress_monitor != (MagickProgressMonitor) NULL)
+      {
+        MagickBooleanType
+          proceed;
+
+        progress++;
+        proceed=SetImageProgress(image,CLAHEImageTag,progress,2*
+          GetPixelChannels(image));
+        if (proceed == MagickFalse)
+          status=MagickFalse;
+      }
+  }
+  image_view=DestroyCacheView(image_view);
+  pixel_cache=RelinquishVirtualMemory(pixel_cache);
+  if (TransformImageColorspace(image,colorspace,exception) == MagickFalse)
+    status=MagickFalse;
+  return(status);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
 %     C l u t I m a g e                                                       %
 %                                                                             %
 %                                                                             %
@@ -414,9 +947,10 @@ MagickExport MagickBooleanType ClutImage(Image *image,const Image *clut_image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ClutImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,ClutImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,ClutImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -575,9 +1109,9 @@ MagickExport MagickBooleanType ColorDecisionListImage(Image *image,
           p=(const char *) content;
           for (i=0; (*p != '\0') && (i < 3); i++)
           {
-            GetNextToken(p,&p,MagickPathExtent,token);
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
             if (*token == ',')
-              GetNextToken(p,&p,MagickPathExtent,token);
+              (void) GetNextToken(p,&p,MagickPathExtent,token);
             switch (i)
             {
               case 0:
@@ -607,9 +1141,9 @@ MagickExport MagickBooleanType ColorDecisionListImage(Image *image,
           p=(const char *) content;
           for (i=0; (*p != '\0') && (i < 3); i++)
           {
-            GetNextToken(p,&p,MagickPathExtent,token);
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
             if (*token == ',')
-              GetNextToken(p,&p,MagickPathExtent,token);
+              (void) GetNextToken(p,&p,MagickPathExtent,token);
             switch (i)
             {
               case 0:
@@ -640,9 +1174,9 @@ MagickExport MagickBooleanType ColorDecisionListImage(Image *image,
           p=(const char *) content;
           for (i=0; (*p != '\0') && (i < 3); i++)
           {
-            GetNextToken(p,&p,MagickPathExtent,token);
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
             if (*token == ',')
-              GetNextToken(p,&p,MagickPathExtent,token);
+              (void) GetNextToken(p,&p,MagickPathExtent,token);
             switch (i)
             {
               case 0:
@@ -677,7 +1211,7 @@ MagickExport MagickBooleanType ColorDecisionListImage(Image *image,
         {
           content=GetXMLTreeContent(saturation);
           p=(const char *) content;
-          GetNextToken(p,&p,MagickPathExtent,token);
+          (void) GetNextToken(p,&p,MagickPathExtent,token);
           color_correction.saturation=StringToDouble(token,(char **) NULL);
         }
     }
@@ -790,10 +1324,11 @@ MagickExport MagickBooleanType ColorDecisionListImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ColorDecisionListImageChannel)
+        #pragma omp atomic
 #endif
+        progress++;
         proceed=SetImageProgress(image,ColorDecisionListCorrectImageTag,
-          progress++,image->rows);
+          progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -963,9 +1498,10 @@ MagickExport MagickBooleanType ContrastImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ContrastImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,ContrastImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,ContrastImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -1253,9 +1789,10 @@ MagickExport MagickBooleanType ContrastStretchImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ContrastStretchImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,ContrastStretchImageTag,progress++,
+        progress++;
+        proceed=SetImageProgress(image,ContrastStretchImageTag,progress,
           image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
@@ -1437,7 +1974,7 @@ MagickExport Image *EnhanceImage(const Image *image,ExceptionInfo *exception)
           pixel.black=((aggregate.black+total_weight/2.0)/total_weight);
           pixel.alpha=((aggregate.alpha+total_weight/2.0)/total_weight);
         }
-      SetPixelViaPixelInfo(image,&pixel,q);
+      SetPixelViaPixelInfo(enhance_image,&pixel,q);
       p+=GetPixelChannels(image);
       q+=GetPixelChannels(enhance_image);
     }
@@ -1449,9 +1986,10 @@ MagickExport Image *EnhanceImage(const Image *image,ExceptionInfo *exception)
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_EnhanceImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,EnhanceImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,EnhanceImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -1631,7 +2169,8 @@ MagickExport MagickBooleanType EqualizeImage(Image *image,
       {
         if ((GetPixelRedTraits(image) & UpdatePixelTrait) != 0)
           {
-            PixelChannel channel = GetPixelChannelChannel(image,RedPixelChannel);
+            PixelChannel channel = GetPixelChannelChannel(image,
+              RedPixelChannel);
             if (black[channel] != white[channel])
               image->colormap[j].red=equalize_map[GetPixelChannels(image)*
                 ScaleQuantumToMap(ClampToQuantum(image->colormap[j].red))+
@@ -1648,7 +2187,8 @@ MagickExport MagickBooleanType EqualizeImage(Image *image,
           }
         if ((GetPixelBlueTraits(image) & UpdatePixelTrait) != 0)
           {
-            PixelChannel channel = GetPixelChannelChannel(image,BluePixelChannel);
+            PixelChannel channel = GetPixelChannelChannel(image,
+              BluePixelChannel);
             if (black[channel] != white[channel])
               image->colormap[j].blue=equalize_map[GetPixelChannels(image)*
                 ScaleQuantumToMap(ClampToQuantum(image->colormap[j].blue))+
@@ -1714,9 +2254,10 @@ MagickExport MagickBooleanType EqualizeImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_EqualizeImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,EqualizeImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,EqualizeImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -1769,7 +2310,7 @@ static inline double gamma_pow(const double value,const double gamma)
 MagickExport MagickBooleanType GammaImage(Image *image,const double gamma,
   ExceptionInfo *exception)
 {
-#define GammaCorrectImageTag  "GammaCorrect/Image"
+#define GammaImageTag  "Gamma/Image"
 
   CacheView
     *image_view;
@@ -1806,7 +2347,7 @@ MagickExport MagickBooleanType GammaImage(Image *image,const double gamma,
   if (gamma != 0.0)
     for (i=0; i <= (ssize_t) MaxMap; i++)
       gamma_map[i]=ScaleMapToQuantum((double) (MaxMap*pow((double) i/
-        MaxMap,1.0/gamma)));
+        MaxMap,PerceptibleReciprocal(gamma))));
   if (image->storage_class == PseudoClass)
     for (i=0; i < (ssize_t) image->colors; i++)
     {
@@ -1863,7 +2404,8 @@ MagickExport MagickBooleanType GammaImage(Image *image,const double gamma,
         PixelTrait traits = GetPixelChannelTraits(image,channel);
         if ((traits & UpdatePixelTrait) == 0)
           continue;
-        q[j]=gamma_map[ScaleQuantumToMap(ClampToQuantum(q[j]))];
+        q[j]=gamma_map[ScaleQuantumToMap(ClampToQuantum((MagickRealType)
+          q[j]))];
       }
       q+=GetPixelChannels(image);
     }
@@ -1875,10 +2417,10 @@ MagickExport MagickBooleanType GammaImage(Image *image,const double gamma,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_GammaImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,GammaCorrectImageTag,progress++,
-          image->rows);
+        progress++;
+        proceed=SetImageProgress(image,GammaImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2081,10 +2623,10 @@ MagickExport MagickBooleanType GrayscaleImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_GrayscaleImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,GrayscaleImageTag,progress++,
-           image->rows);
+        progress++;
+        proceed=SetImageProgress(image,GrayscaleImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2213,6 +2755,7 @@ MagickExport MagickBooleanType HaldClutImage(Image *image,
     for (x=0; x < (ssize_t) image->columns; x++)
     {
       double
+        area,
         offset;
 
       HaldInfo
@@ -2243,8 +2786,11 @@ MagickExport MagickBooleanType HaldClutImage(Image *image,
       if (status == MagickFalse)
         break;
       pixel3=zero;
+      area=point.y;
+      if (hald_image->interpolate == NearestInterpolatePixel)
+        area=(point.y < 0.5) ? 0.0 : 1.0;
       CompositePixelInfoAreaBlend(&pixel1,pixel1.alpha,&pixel2,pixel2.alpha,
-        point.y,&pixel3);
+        area,&pixel3);
       offset+=cube_size;
       status=InterpolatePixelInfo(hald_image,hald_view,hald_image->interpolate,
         fmod(offset,width),floor(offset/width),&pixel1,exception);
@@ -2256,10 +2802,13 @@ MagickExport MagickBooleanType HaldClutImage(Image *image,
         break;
       pixel4=zero;
       CompositePixelInfoAreaBlend(&pixel1,pixel1.alpha,&pixel2,pixel2.alpha,
-        point.y,&pixel4);
+        area,&pixel4);
       pixel=zero;
+      area=point.z;
+      if (hald_image->interpolate == NearestInterpolatePixel)
+        area=(point.z < 0.5)? 0.0 : 1.0;
       CompositePixelInfoAreaBlend(&pixel3,pixel3.alpha,&pixel4,pixel4.alpha,
-        point.z,&pixel);
+        area,&pixel);
       if ((GetPixelRedTraits(image) & UpdatePixelTrait) != 0)
         SetPixelRed(image,ClampToQuantum(pixel.red),q);
       if ((GetPixelGreenTraits(image) & UpdatePixelTrait) != 0)
@@ -2282,9 +2831,10 @@ MagickExport MagickBooleanType HaldClutImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_HaldClutImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,HaldClutImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,HaldClutImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2347,7 +2897,7 @@ static inline double LevelPixel(const double black_point,
 
   scale=PerceptibleReciprocal(white_point-black_point);
   level_pixel=QuantumRange*gamma_pow(scale*((double) pixel-black_point),
-    1.0/gamma);
+    PerceptibleReciprocal(gamma));
   return(level_pixel);
 }
 
@@ -2447,9 +2997,10 @@ MagickExport MagickBooleanType LevelImage(Image *image,const double black_point,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_LevelImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,LevelImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,LevelImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -2597,9 +3148,10 @@ MagickExport MagickBooleanType LevelizeImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_LevelizeImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,LevelizeImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,LevelizeImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3310,9 +3862,10 @@ MagickExport MagickBooleanType ModulateImage(Image *image,const char *modulate,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_ModulateImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,ModulateImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,ModulateImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3446,11 +3999,8 @@ MagickExport MagickBooleanType NegateImage(Image *image,
             MagickBooleanType
               proceed;
 
-#if defined(MAGICKCORE_OPENMP_SUPPORT)
-            #pragma omp critical (MagickCore_NegateImage)
-#endif
-            proceed=SetImageProgress(image,NegateImageTag,progress++,
-              image->rows);
+            progress++;
+            proceed=SetImageProgress(image,NegateImageTag,progress,image->rows);
             if (proceed == MagickFalse)
               status=MagickFalse;
           }
@@ -3504,9 +4054,10 @@ MagickExport MagickBooleanType NegateImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_NegateImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,NegateImageTag,progress++,image->rows);
+        progress++;
+        proceed=SetImageProgress(image,NegateImageTag,progress,image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;
       }
@@ -3806,9 +4357,10 @@ MagickExport MagickBooleanType SigmoidalContrastImage(Image *image,
           proceed;
 
 #if defined(MAGICKCORE_OPENMP_SUPPORT)
-        #pragma omp critical (MagickCore_SigmoidalContrastImage)
+        #pragma omp atomic
 #endif
-        proceed=SetImageProgress(image,SigmoidalContrastImageTag,progress++,
+        progress++;
+        proceed=SetImageProgress(image,SigmoidalContrastImageTag,progress,
           image->rows);
         if (proceed == MagickFalse)
           status=MagickFalse;

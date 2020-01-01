@@ -324,14 +324,14 @@
           <message name="UnrecognizedAlphaChannelOption">
             unrecognized alpha channel option
           </message>
-          <message name="UnrecognizedBitsPerPixel">
-            unrecognized bits per pixel
-          </message>
           <message name="UnrecognizedImageCompression">
             unrecognized compression
           </message>
           <message name="UnrecognizedNumberOfColors">
             unrecognized number of colors
+          </message>
+          <message name="UnsupportedBitsPerPixel">
+            unsupported bits per pixel
           </message>
         </error>
         <fatalerror>
@@ -503,6 +503,9 @@
         <message name="ImageDepthNotSupported">
           image depth not supported
         </message>
+        <message name="ImageSequenceRequired">
+          image sequence is required
+        </message>
         <message name="ImageMorphologyDiffers">
           image morphology differs
         </message>
@@ -540,6 +543,9 @@
       <warning>
         <message name="AssociateProfile">
           associate profile with image, a source and destination color profile required for transform
+        </message>
+        <message name="UnableToTransformColorspace">
+          unable to transform colorspace
         </message>
       </warning>
     </image>
@@ -613,7 +619,7 @@
         <message name="CompositeImageRequired">
           composite image required
         </message>
-        <message name="CurlyBrasesNestedTooDeeply">
+        <message name="CurlyBracesNestedTooDeeply">
           curly braces nested too deeply
         </message>
         <message name="DeprecatedOptionNoCode">
@@ -630,6 +636,9 @@
         </message>
         <message name="GeometryDoesNotContainImage">
           geometry does not contain image
+        </message>
+        <message name="ImageSequenceRequired">
+          image sequence is required
         </message>
         <message name="InterpretPropertyFailure">
           failure to interpret image property escapes
@@ -1001,7 +1010,7 @@
     <policy>
       <error>
         <message name="NotAuthorized">
-          not authorized
+          attempt to perform an operation not allowed by the security policy
         </message>
       </error>
     </policy>
