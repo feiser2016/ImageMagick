@@ -1137,20 +1137,14 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
 
   color=0.0f;
   scale=QuantumRange;
-  if (compliance != NoCompliance)
+  if ((compliance != NoCompliance) || (pixel->depth <= 8))
     scale=255.0f;
   switch (channel)
   {
     case RedPixelChannel:
     {
       color=pixel->red;
-      if ((pixel->colorspace == HCLColorspace) ||
-          (pixel->colorspace == HCLpColorspace) ||
-          (pixel->colorspace == HSBColorspace) ||
-          (pixel->colorspace == HSIColorspace) ||
-          (pixel->colorspace == HSLColorspace) ||
-          (pixel->colorspace == HSVColorspace) ||
-          (pixel->colorspace == HWBColorspace))
+      if (IsHueCompatibleColorspace(pixel->colorspace) != MagickFalse)
         scale=360.0f;
       if ((compliance != NoCompliance) && (pixel->colorspace == LabColorspace))
         scale=100.0f;
@@ -1159,13 +1153,7 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
     case GreenPixelChannel:
     {
       color=pixel->green;
-      if ((pixel->colorspace == HCLColorspace) ||
-          (pixel->colorspace == HCLpColorspace) ||
-          (pixel->colorspace == HSBColorspace) ||
-          (pixel->colorspace == HSIColorspace) ||
-          (pixel->colorspace == HSLColorspace) ||
-          (pixel->colorspace == HSVColorspace) ||
-          (pixel->colorspace == HWBColorspace))
+      if (IsHueCompatibleColorspace(pixel->colorspace) != MagickFalse)
         scale=100.0f;
       if ((compliance != NoCompliance) && (pixel->colorspace == LabColorspace))
         color-=QuantumRange/2.0f;
@@ -1174,13 +1162,7 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
     case BluePixelChannel:
     {
       color=pixel->blue;
-      if ((pixel->colorspace == HCLColorspace) ||
-          (pixel->colorspace == HCLpColorspace) ||
-          (pixel->colorspace == HSBColorspace) ||
-          (pixel->colorspace == HSIColorspace) ||
-          (pixel->colorspace == HSLColorspace) ||
-          (pixel->colorspace == HSVColorspace) ||
-          (pixel->colorspace == HWBColorspace))
+      if (IsHueCompatibleColorspace(pixel->colorspace) != MagickFalse)
         scale=100.0f;
       if (pixel->colorspace == LabColorspace)
         color-=QuantumRange/2.0f;
@@ -1206,8 +1188,8 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
     default:
       break;
   }
-  if ((pixel->colorspace == sRGBColorspace) &&
-      (fabs((double) color-(ssize_t) color) > 0.01f))
+  if ((compliance != NoCompliance) && ((color-(ssize_t) color) > 0.01f) &&
+      (IssRGBCompatibleColorspace(pixel->colorspace) != MagickFalse))
     scale=100.0f;
   if (scale != 100.0f)
     (void) FormatLocaleString(component,MagickPathExtent,"%.*g",
@@ -2195,9 +2177,6 @@ static MagickBooleanType LoadColorCache(LinkedListInfo *cache,const char *xml,
 MagickExport MagickBooleanType QueryColorCompliance(const char *name,
   const ComplianceType compliance,PixelInfo *color,ExceptionInfo *exception)
 {
-  extern const char
-    BackgroundColor[];
-
   GeometryInfo
     geometry_info;
 

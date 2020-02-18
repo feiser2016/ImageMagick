@@ -3183,6 +3183,9 @@ static Image *ReadSVGImage(const ImageInfo *image_info,ExceptionInfo *exception)
   char
     filename[MagickPathExtent];
 
+  const char
+    *option;
+
   FILE
     *file;
 
@@ -3302,22 +3305,39 @@ static Image *ReadSVGImage(const ImageInfo *image_info,ExceptionInfo *exception)
         ssize_t
           y;
 
-        svg_handle=rsvg_handle_new();
-        if (svg_handle == (RsvgHandle *) NULL)
+        unsigned char
+          *buffer;
+
+        buffer=(unsigned char *) AcquireQuantumMemory(MagickMaxBufferExtent,
+          sizeof(*buffer));
+        if (buffer == (unsigned char *) NULL)
           ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+#if LIBRSVG_CHECK_VERSION(2,40,3)
+        option=GetImageOption(image_info,"svg:xml-parse-huge");
+        if ((option != (char *) NULL) && (IsStringTrue(option) != MagickFalse))
+          svg_handle=rsvg_handle_new_with_flags(RSVG_HANDLE_FLAG_UNLIMITED);
+        else
+#endif
+          svg_handle=rsvg_handle_new();
+        if (svg_handle == (RsvgHandle *) NULL)
+          {
+            buffer=(unsigned char *) RelinquishMagickMemory(buffer);
+            ThrowReaderException(ResourceLimitError,"MemoryAllocationFailed");
+          }
         rsvg_handle_set_base_uri(svg_handle,image_info->filename);
         if ((fabs(image->resolution.x) > MagickEpsilon) &&
             (fabs(image->resolution.y) > MagickEpsilon))
           rsvg_handle_set_dpi_x_y(svg_handle,image->resolution.x,
             image->resolution.y);
-        while ((n=ReadBlob(image,MagickPathExtent-1,message)) != 0)
+        while ((n=ReadBlob(image,MagickMaxBufferExtent-1,buffer)) != 0)
         {
-          message[n]='\0';
+          buffer[n]='\0';
           error=(GError *) NULL;
-          (void) rsvg_handle_write(svg_handle,message,n,&error);
+          (void) rsvg_handle_write(svg_handle,buffer,n,&error);
           if (error != (GError *) NULL)
             g_error_free(error);
         }
+        buffer=(unsigned char *) RelinquishMagickMemory(buffer);
         error=(GError *) NULL;
         rsvg_handle_close(svg_handle,&error);
         if (error != (GError *) NULL)
@@ -3578,13 +3598,10 @@ static Image *ReadSVGImage(const ImageInfo *image_info,ExceptionInfo *exception)
   message[n]='\0';
   if (n > 0)
     {
-      const char
-        *value;
-
       svg_info->parser=xmlCreatePushParserCtxt(sax_handler,svg_info,(char *)
         message,n,image->filename);
-      value=GetImageOption(image_info,"svg:xml-parse-huge");
-      if ((value != (char *) NULL) && (IsStringTrue(value) != MagickFalse))
+      option=GetImageOption(image_info,"svg:xml-parse-huge");
+      if ((option != (char *) NULL) && (IsStringTrue(option) != MagickFalse))
         (void) xmlCtxtUseOptions(svg_info->parser,XML_PARSE_HUGE);
       while ((n=ReadBlob(image,MagickPathExtent-1,message)) != 0)
       {

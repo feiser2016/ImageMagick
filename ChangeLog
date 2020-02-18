@@ -1,3 +1,102 @@
+2020-02-17  7.0.9-24 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-24, GIT revision 16919:41efef9de:20200217
+
+2020-02-15  7.0.9-24 Cristy  <quetzlzacatenango@image...>
+  * Support connected-components:eccentricity-threshold,
+    connected-components:major-axis-threshold,
+    connected-components:minor-axis-threshold,
+    connected-components:angle-threshold.
+  * Set the alpha channel if the write mask is not enabled.
+  * Corrected ellipse orientation when computing image moments.
+
+2020-02-14  7.0.9-23 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-23, GIT revision 16884:acb56cd:20200214
+
+2020-02-08  7.0.9-23 Cristy  <quetzlzacatenango@image...>
+  * Report gray(127.5) as gray(50%).
+  * Support -define connected-components:perimeter-threshold=min-max
+
+2020-02-07  7.0.9-22 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-22, GIT revision 16855:8733f3e:20200207
+
+2020-02-03  7.0.9-22 Cristy  <quetzlzacatenango@image...>
+  * More work on connect components, e.g. keep-colors, remove-colors,
+    keep-topids.
+  * Initialize mutex before locking if its not already initialized.
+  * Support 24-bit TIFF images.
+
+2020-02-01  7.0.9-21 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-21, GIT revision 16823:290cb93:20200201.
+
+2020-01-27  7.0.9-21 Cristy  <quetzlzacatenango@image...>
+  * Support additional connected components defines.
+  * Refresh cache morphology when writing MPC images.
+
+2020-01-26  7.0.9-19 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-19, GIT revision 16789:bac6ecc:20200126
+
+2020-01-26  7.0.9-19 Cristy  <quetzlzacatenango@image...>
+  * Make PNG creation reproducible (reference
+    https://github.com/ImageMagick/ImageMagick/pull/1270).
+  * Refactor uninitialize variable patch for -fx "while(,)" expression.
+
+2020-01-25  7.0.9-18 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-18, GIT revision 16780:08beae5:20200125
+
+2020-01-19  7.0.9-18 Cristy  <quetzlzacatenango@image...>
+  * Alpha draw primitive no longer returns a parser exception.
+  * Support 32-bit tiled TIFF images.
+  * New -connected-component options (reference
+    https://imagemagick.org/script/connected-components.php).
+
+    https://imagemagick.org/discourse-server/viewtopic.php?f=1&t=37391).
+2020-01-18  7.0.9-17 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-17, GIT revision 16753:c300b3a:20200118
+
+2020-01-12  7.0.9-17 Cristy  <quetzlzacatenango@image...>
+  * Allow larger negative interline spacing (reference
+    https://imagemagick.org/discourse-server/viewtopic.php?f=1&t=37391).
+  * Conditional compile for huge xml pages for RSVG delegate library.
+  * Put "width" property in the PNG namespace (reference
+    https://github.com/ImageMagick/ImageMagick/issues/1833).
+  * -combine -colorspace sRGB no longer returns grayscale output (reference
+    https://github.com/ImageMagick/ImageMagick/issues/1835).
+  * Support Jzazbz colorspace (contributed by snibgo @
+    http://im.snibgo.com/jzazbz.htm).
+
+2020-01-12  7.0.9-16 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-16, GIT revision 16719:fefd765:20200112.
+
+2020-01-12  7.0.9-16 Cristy  <quetzlzacatenango@image...>
+  * Fixed three failing Magick.NET unit tests.
+
+2020-01-11  7.0.9-15 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-15, GIT revision 16709:0000f6d:20200111.
+
+2020-01-11  7.0.9-15 Dirk Lemstra <dirk@lem.....org>
+  * Also support svg:xml-parse-huge when using librsvg.
+
+2020-01-10  7.0.9-15 Cristy  <quetzlzacatenango@image...>
+  * Optimize -evaluate-sequence option (reference
+    https://github.com/ImageMagick/ImageMagick/issues/1824).
+  * Support Fx do() iterator.
+  * `magick -size 100x100 xc:black black.pnm` no longer creates a white image
+    (reference https://github.com/ImageMagick/ImageMagick/issues/1817).
+  * setjmp/longjmp in jpeg.c no longer trigger undefind behavior (reference
+    https://imagemagick.org/discourse-server/viewtopic.php?f=3&t=37379).
+  * Permit compositing in the CMYK colorspace (reference
+    https://imagemagick.org/discourse-server/viewtopic.php?f=3&t=37368).
+
+2020-01-04  7.0.9-14 Cristy  <quetzlzacatenango@image...>
+  * Release ImageMagick version 7.0.9-14, GIT revision 16654:89ef7ea:20200104.
+
+2020-01-01  7.0.9-14 Cristy  <quetzlzacatenango@image...>
+  * Support extended Fx assignment operators (e.g. *=, /=, ++, --, etc.)
+  * Support Fx for() iterator.
+  * Optimize Fx performance.
+  * Ensure circle.rb renders the same for IMv6 and IMv7 (reference
+    https://github.com/rmagick/rmagick/issues/905).
+
 2019-12-30  7.0.9-13 Cristy  <quetzlzacatenango@image...>
   * Release ImageMagick version 7.0.9-13, GIT revision 16616:dbafe0b:20191230.
 
@@ -7,8 +106,8 @@
   * Sync pixel cache for -kmeans option.
   * Thread -kmeans option.
   * PSD: only set the alpha channel when type is not 0.
- * Fix Lab to custom profile (CMYK or RGB) conversion bug (reference
-   https://imagemagick.org/discourse-server/viewtopic.php?f=3&t=37318).
+  * Fix Lab to custom profile (CMYK or RGB) conversion bug (reference
+    https://imagemagick.org/discourse-server/viewtopic.php?f=3&t=37318).
 
 2019-12-26  7.0.9-12 Cristy  <quetzlzacatenango@image...>
   * Release ImageMagick version 7.0.9-12, GIT revision 16587:7d6a559:20191226.
@@ -31,7 +130,6 @@
 2019-12-18  7.0.9-10 Cristy  <quetzlzacatenango@image...>
   * Some clang releases do not support _aligned_alloc().
   * Support -kmeans command-line option.
-  * The -layers optimize option requires a fully transparent previous image.
 
 2019-12-07  7.0.9-9 Cristy  <quetzlzacatenango@image...>
   * Release ImageMagick version 7.0.9-9, GIT revision 16513:8ec82f4:20191215.

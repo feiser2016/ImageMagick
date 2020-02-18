@@ -1089,6 +1089,7 @@ static void *DestroyMagickNode(void *magick_info)
 
 static MagickBooleanType IsMagickTreeInstantiated(ExceptionInfo *exception)
 {
+  (void) exception;
   if (magick_list_initialized == MagickFalse)
     {
       if (magick_semaphore == (SemaphoreInfo *) NULL)
@@ -1423,14 +1424,6 @@ static void MagickSignalHandler(int signal_number)
   if (signal_number == SIGFPE)
     abort();
 #endif
-#if defined(SIGXCPU)
-  if (signal_number == SIGXCPU)
-    abort();
-#endif
-#if defined(SIGXFSZ)
-  if (signal_number == SIGXFSZ)
-    abort();
-#endif
 #if defined(SIGSEGV)
   if (signal_number == SIGSEGV)
     abort();
@@ -1444,10 +1437,6 @@ static void MagickSignalHandler(int signal_number)
 #endif
 #if defined(SIGINT)
   if (signal_number == SIGINT)
-    _exit(signal_number);
-#endif
-#if defined(SIGBUS)
-  if (signal_number == SIGBUS)
     _exit(signal_number);
 #endif
 #if defined(MAGICKCORE_HAVE_RAISE)

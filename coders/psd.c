@@ -923,20 +923,29 @@ static inline void ReversePSDString(Image *image,char *p,size_t length)
 }
 
 static inline void SetPSDPixel(Image *image,const size_t channels,
-  const ssize_t type,const Quantum pixel,Quantum *q,ExceptionInfo *exception)
+  const ssize_t type,const size_t packet_size,const Quantum pixel,Quantum *q,
+  ExceptionInfo *exception)
 {
   if (image->storage_class == PseudoClass)
     {
       PixelInfo
         *color;
 
+      Quantum
+        index;
+
+      index=pixel;
+      if (packet_size == 1)
+        index=(Quantum) ScaleQuantumToChar(index);
+      index=(Quantum) ConstrainColormapIndex(image,(ssize_t) index,
+        exception);
+
       if (type == 0)
-        SetPixelIndex(image,(Quantum) ConstrainColormapIndex(image,
-          (ssize_t) pixel,exception),q);
-      color=image->colormap+(ssize_t) GetPixelIndex(image,q);
+        SetPixelIndex(image,index,q);
       if ((type == 0) && (channels > 1))
         return;
-      else if (type != 0)
+      color=image->colormap+(ssize_t) GetPixelIndex(image,q);
+      if (type != 0)
         color->alpha=(MagickRealType) pixel;
       SetPixelViaPixelInfo(image,color,q);
       return;
@@ -1034,7 +1043,7 @@ static MagickBooleanType ReadPSDChannelPixels(Image *image,
         }
     if (image->depth > 1)
       {
-        SetPSDPixel(image,channels,type,pixel,q,exception);
+        SetPSDPixel(image,channels,type,packet_size,pixel,q,exception);
         q+=GetPixelChannels(image);
       }
     else
@@ -1048,7 +1057,7 @@ static MagickBooleanType ReadPSDChannelPixels(Image *image,
           number_bits=8;
         for (bit = 0; bit < (ssize_t) number_bits; bit++)
         {
-          SetPSDPixel(image,channels,type,(((unsigned char) pixel)
+          SetPSDPixel(image,channels,type,packet_size,(((unsigned char) pixel)
             & (0x01 << (7-bit))) != 0 ? 0 : QuantumRange,q,exception);
           q+=GetPixelChannels(image);
           x++;
@@ -1563,6 +1572,8 @@ static MagickBooleanType CheckPSDChannels(const PSDInfo *psd_info,
       type;
 
     type=layer_info->channel_info[i].type;
+    if ((i == 0) && (psd_info->mode == IndexedMode) && (type != 0))
+      return(MagickFalse);
     if (type == -1)
       {
         channel_type|=AlphaChannel;
@@ -1638,6 +1649,18 @@ static inline MagickBooleanType PSDSkipImage(const PSDInfo *psd_info,
   return(MagickFalse);
 }
 
+static void CheckMergedImageAlpha(const PSDInfo *psd_info,Image *image)
+{
+  /*
+    The number of layers cannot be used to determine if the merged image
+    contains an alpha channel. So we enable it when we think we should.
+  */
+  if (((psd_info->mode == GrayscaleMode) && (psd_info->channels > 2)) ||
+      ((psd_info->mode == RGBMode) && (psd_info->channels > 3)) ||
+      ((psd_info->mode == CMYKMode) && (psd_info->channels > 4)))
+    image->alpha_trait=BlendPixelTrait;
+}
+
 static MagickBooleanType ReadPSDLayersInternal(Image *image,
   const ImageInfo *image_info,const PSDInfo *psd_info,
   const MagickBooleanType skip_layers,ExceptionInfo *exception)
@@ -1674,7 +1697,10 @@ static MagickBooleanType ReadPSDLayersInternal(Image *image,
       if (count == 4)
         ReversePSDString(image,type,(size_t) count);
       if ((count != 4) || (LocaleNCompare(type,"8BIM",4) != 0))
-        return(MagickTrue);
+        {
+          CheckMergedImageAlpha(psd_info,image);
+          return(MagickTrue);
+        }
       else
         {
           count=ReadBlob(image,4,(unsigned char *) type);
@@ -1684,7 +1710,10 @@ static MagickBooleanType ReadPSDLayersInternal(Image *image,
               (LocaleNCompare(type,"Lr32",4) == 0)))
             size=GetPSDSize(psd_info,image);
           else
-            return(MagickTrue);
+            {
+              CheckMergedImageAlpha(psd_info,image);
+              return(MagickTrue);
+            }
         }
     }
   if (size == 0)

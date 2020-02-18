@@ -322,6 +322,7 @@ MagickExport void *AcquirePixelCachePixels(const Image *image,size_t *length,
   assert(exception != (ExceptionInfo *) NULL);
   assert(exception->signature == MagickCoreSignature);
   assert(image->cache != (Cache) NULL);
+  (void) exception;
   cache_info=(CacheInfo *) image->cache;
   assert(cache_info->signature == MagickCoreSignature);
   *length=0;
@@ -1750,9 +1751,10 @@ static Cache GetImagePixelCache(Image *image,const MagickBooleanType clone,
       /*
         Ensure the image matches the pixel cache morphology.
       */
+      if (image->type != UndefinedType)
+        image->type=UndefinedType;
       if (ValidatePixelCacheMorphology(image) == MagickFalse)
         {
-          image->type=UndefinedType;
           status=OpenPixelCache(image,IOMode,exception);
           cache_info=(CacheInfo *) image->cache;
           if (cache_info->file != -1)
@@ -3204,7 +3206,7 @@ MagickExport const Quantum *GetVirtualPixelQueue(const Image *image)
 %  Pixels accessed via the returned pointer represent a simple array of type
 %  Quantum.  If the image type is CMYK or the storage class is PseudoClass,
 %  call GetAuthenticMetacontent() after invoking GetAuthenticPixels() to
-%  access the meta-content (of type void) corresponding to the the
+%  access the meta-content (of type void) corresponding to the
 %  region.
 %
 %  If you plan to modify the pixels, use GetAuthenticPixels() instead.

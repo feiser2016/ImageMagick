@@ -3152,7 +3152,7 @@ static ssize_t MorphologyPrimitive(const Image *image,Image *morphology_image,
                shape.  Essentually white values are decreased to the smallest
                'distance from edge' it can find.
 
-               It works by adding kernel values to the neighbourhood, and and
+               It works by adding kernel values to the neighbourhood, and
                select the minimum value found. The kernel is rotated before
                use, so kernel distances match resulting distances, when a user
                provided asymmetric kernel is applied.
@@ -3166,7 +3166,7 @@ static ssize_t MorphologyPrimitive(const Image *image,Image *morphology_image,
                GrayErode:  Kernel values subtracted and minimum value found No
                kernel rotation used.
 
-               Note the the Iterative Distance method is essentially a
+               Note the Iterative Distance method is essentially a
                GrayErode, but with negative kernel values, and kernel rotation
                applied.
             */

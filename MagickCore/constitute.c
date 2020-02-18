@@ -662,6 +662,12 @@ MagickExport Image *ReadImage(const ImageInfo *image_info,
     ssize_t
       option_type;
 
+    static const char
+      *source_date_epoch = (const char *) NULL;
+
+    static MagickBooleanType
+      epoch_initalized = MagickFalse;
+
     next->taint=MagickFalse;
     GetPathComponent(magick_filename,MagickPath,magick_path);
     if (*magick_path == '\0' && *next->magick == '\0')
@@ -791,12 +797,20 @@ MagickExport Image *ReadImage(const ImageInfo *image_info,
     profile=GetImageProfile(next,"iptc");
     if (profile == (const StringInfo *) NULL)
       profile=GetImageProfile(next,"8bim");
-    (void) FormatMagickTime((time_t) GetBlobProperties(next)->st_mtime,
-      MagickPathExtent,timestamp);
-    (void) SetImageProperty(next,"date:modify",timestamp,exception);
-    (void) FormatMagickTime((time_t) GetBlobProperties(next)->st_ctime,
-      MagickPathExtent,timestamp);
-    (void) SetImageProperty(next,"date:create",timestamp,exception);
+    if (epoch_initalized == MagickFalse)
+      {
+        source_date_epoch=getenv("SOURCE_DATE_EPOCH");
+        epoch_initalized=MagickTrue;
+      }
+    if (source_date_epoch == (const char *) NULL)
+      {
+        (void) FormatMagickTime((time_t) GetBlobProperties(next)->st_mtime,
+          MagickPathExtent,timestamp);
+        (void) SetImageProperty(next,"date:modify",timestamp,exception);
+        (void) FormatMagickTime((time_t) GetBlobProperties(next)->st_ctime,
+          MagickPathExtent,timestamp);
+        (void) SetImageProperty(next,"date:create",timestamp,exception);
+      }
     option=GetImageOption(image_info,"delay");
     if (option != (const char *) NULL)
       {

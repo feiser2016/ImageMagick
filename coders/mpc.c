@@ -1172,7 +1172,10 @@ static MagickBooleanType WriteMPCImage(const ImageInfo *image_info,Image *image,
   {
     /*
       Write persistent cache meta-information.
+
+      SetImageStorageClass() required to sync pixel cache.
     */
+    (void) SetImageStorageClass(image,image->storage_class,exception);
     depth=GetImageQuantumDepth(image,MagickTrue);
     if ((image->storage_class == PseudoClass) &&
         (image->colors > (size_t) (GetQuantumRange(image->depth)+1)))

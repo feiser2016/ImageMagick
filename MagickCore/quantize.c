@@ -655,10 +655,13 @@ static MagickBooleanType AssignImageColors(Image *image,CubeInfo *cube_info,
       */
       intensity=GetPixelInfoLuma(image->colormap+0) < QuantumRange/2.0 ? 0.0 :
         QuantumRange;
-      if ((image->colors > 1) &&
-          (GetPixelInfoLuma(image->colormap+0) >
-           GetPixelInfoLuma(image->colormap+1)))
-        intensity=(double) QuantumRange;
+      if (image->colors > 1)
+        {
+          intensity=0.0;
+          if (GetPixelInfoLuma(image->colormap+0) >
+              GetPixelInfoLuma(image->colormap+1))
+            intensity=(double) QuantumRange;
+        }
       image->colormap[0].red=intensity;
       image->colormap[0].green=intensity;
       image->colormap[0].blue=intensity;
@@ -787,13 +790,17 @@ static MagickBooleanType ClassifyImageColors(CubeInfo *cube_info,
     Classify the first cube_info->maximum_colors colors to a tree depth of 8.
   */
   SetAssociatedAlpha(image,cube_info);
-  if ((cube_info->quantize_info->colorspace != UndefinedColorspace) &&
-      (cube_info->quantize_info->colorspace != CMYKColorspace))
-    (void) TransformImageColorspace((Image *) image,
-      cube_info->quantize_info->colorspace,exception);
-  else
-    if (IssRGBCompatibleColorspace(image->colorspace) == MagickFalse)
-      (void) TransformImageColorspace((Image *) image,sRGBColorspace,exception);
+  if (cube_info->quantize_info->colorspace != image->colorspace)
+    {
+      if ((cube_info->quantize_info->colorspace != UndefinedColorspace) &&
+          (cube_info->quantize_info->colorspace != CMYKColorspace))
+        (void) TransformImageColorspace((Image *) image,
+          cube_info->quantize_info->colorspace,exception);
+      else
+        if (IssRGBCompatibleColorspace(image->colorspace) == MagickFalse)
+          (void) TransformImageColorspace((Image *) image,sRGBColorspace,
+            exception);
+    }
   midpoint.red=(double) QuantumRange/2.0;
   midpoint.green=(double) QuantumRange/2.0;
   midpoint.blue=(double) QuantumRange/2.0;
@@ -1010,9 +1017,10 @@ static MagickBooleanType ClassifyImageColors(CubeInfo *cube_info,
       break;
   }
   image_view=DestroyCacheView(image_view);
-  if ((cube_info->quantize_info->colorspace != UndefinedColorspace) &&
-      (cube_info->quantize_info->colorspace != CMYKColorspace))
-    (void) TransformImageColorspace((Image *) image,sRGBColorspace,exception);
+  if (cube_info->quantize_info->colorspace != image->colorspace)
+    if ((cube_info->quantize_info->colorspace != UndefinedColorspace) &&
+        (cube_info->quantize_info->colorspace != CMYKColorspace))
+      (void) TransformImageColorspace((Image *) image,sRGBColorspace,exception);
   return(y < (ssize_t) image->rows ? MagickFalse : MagickTrue);
 }
 
@@ -2392,7 +2400,7 @@ static KmeansInfo **AcquireKmeansThreadSet(const size_t number_colors)
 static inline double KmeansMetric(const Image *magick_restrict image,
   const Quantum *magick_restrict p,const PixelInfo *magick_restrict q)
 {
-  double
+  register double
     gamma,
     metric,
     pixel;
@@ -2402,14 +2410,13 @@ static inline double KmeansMetric(const Image *magick_restrict image,
   if ((image->alpha_trait != UndefinedPixelTrait) ||
       (q->alpha_trait != UndefinedPixelTrait))
     {
-      double
-        que_alpha;
-
-      que_alpha=q->alpha_trait != UndefinedPixelTrait ? q->alpha : OpaqueAlpha;
-      pixel=QuantumScale*(GetPixelAlpha(image,p)-que_alpha);
+      pixel=GetPixelAlpha(image,p)-(q->alpha_trait != UndefinedPixelTrait ?
+        q->alpha : OpaqueAlpha);
       metric+=pixel*pixel;
-      gamma*=QuantumScale*GetPixelAlpha(image,p);
-      gamma*=QuantumScale*que_alpha;
+      if (image->alpha_trait != UndefinedPixelTrait)
+        gamma*=QuantumScale*GetPixelAlpha(image,p);
+      if (q->alpha_trait != UndefinedPixelTrait)
+        gamma*=QuantumScale*q->alpha;
     }
   if (image->colorspace == CMYKColorspace)
     {
@@ -2420,9 +2427,7 @@ static inline double KmeansMetric(const Image *magick_restrict image,
     }
   metric*=3.0;
   pixel=QuantumScale*(GetPixelRed(image,p)-q->red);
-  if ((image->colorspace == HSLColorspace) ||
-      (image->colorspace == HSBColorspace) ||
-      (image->colorspace == HWBColorspace))
+  if (IsHueCompatibleColorspace(image->colorspace) != MagickFalse)
     {
       if (fabs((double) pixel) > 0.5)
         pixel-=0.5;
@@ -2471,9 +2476,6 @@ MagickExport MagickBooleanType KmeansImage(Image *image,
     (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
   assert(exception != (ExceptionInfo *) NULL);
   assert(exception->signature == MagickCoreSignature);
-  status=AcquireImageColormap(image,number_colors,exception);
-  if (status == MagickFalse)
-    return(status);
   colors=GetImageArtifact(image,"kmeans:seed-colors");
   if (colors == (const char *) NULL)
     {
@@ -2491,6 +2493,7 @@ MagickExport MagickBooleanType KmeansImage(Image *image,
         Seed clusters from color quantization.
       */
       quantize_info=AcquireQuantizeInfo((ImageInfo *) NULL);
+      quantize_info->colorspace=image->colorspace;
       quantize_info->number_colors=number_colors;
       quantize_info->dither_method=NoDitherMethod;
       colors=number_colors;
@@ -2508,8 +2511,12 @@ MagickExport MagickBooleanType KmeansImage(Image *image,
         {
           if (cube_info->colors > cube_info->maximum_colors)
             ReduceImageColors(image,cube_info);
-          image->colors=0;
-          status=DefineImageColormap(image,cube_info,cube_info->root);
+          status=AcquireImageColormap(image,number_colors,exception);
+          if (status != MagickFalse)
+            {
+              image->colors=0;
+              (void) DefineImageColormap(image,cube_info,cube_info->root);
+            }
         }
       DestroyCubeInfo(cube_info);
       quantize_info=DestroyQuantizeInfo(quantize_info);
@@ -2527,6 +2534,9 @@ MagickExport MagickBooleanType KmeansImage(Image *image,
       /*
         Seed clusters from color list (e.g. red;green;blue).
       */
+      status=AcquireImageColormap(image,number_colors,exception);
+      if (status == MagickFalse)
+        return(status);
       for (n=0, p=colors; n < (ssize_t) image->colors; n++)
       {
         register const char
