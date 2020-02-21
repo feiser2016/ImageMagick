@@ -303,11 +303,12 @@ static Image *RenderSVGImage(const ImageInfo *image_info,Image *image,
   if (delegate_info == (const DelegateInfo *) NULL)
     return((Image *) NULL);
   status=AcquireUniqueSymbolicLink(image->filename,input_filename);
-  (void) AcquireUniqueFilename(output_filename);
+  (void) AcquireUniqueFilename(unique);
+  (void) FormatLocaleString(output_filename,MagickPathExtent,"%s.png",unique);
   (void) AcquireUniqueFilename(unique);
   density=AcquireString("");
-  (void) FormatLocaleString(density,MagickPathExtent,"%.20g,%.20g",
-    image->resolution.x,image->resolution.y);
+  (void) FormatLocaleString(density,MagickPathExtent,"%.20g",
+    ceil(sqrt(image->resolution.x*image->resolution.y)-0.5));
   (void) FormatLocaleString(background,MagickPathExtent,
     "rgb(%.20g%%,%.20g%%,%.20g%%)",
     100.0*QuantumScale*image->background_color.red,
@@ -2781,7 +2782,8 @@ static void SVGEndElement(void *context,const xmlChar *name)
       if (LocaleCompare((const char *) name,"stop") == 0)
         {
           (void) FormatLocaleFile(svg_info->file,"stop-color \"%s\" %s\n",
-            svg_info->stop_color,svg_info->offset);
+            svg_info->stop_color,svg_info->offset == (char *) NULL ? "100%" : 
+            svg_info->offset);
           break;
         }
       if (LocaleCompare((char *) name,"style") == 0)
