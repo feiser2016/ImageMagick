@@ -60,6 +60,7 @@
 #include "MagickCore/monitor.h"
 #include "MagickCore/monitor-private.h"
 #include "MagickCore/pixel-accessor.h"
+#include "MagickCore/property.h"
 #include "MagickCore/resource_.h"
 #include "MagickCore/resize.h"
 #include "MagickCore/statistic.h"

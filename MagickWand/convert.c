@@ -1071,6 +1071,15 @@ WandExport MagickBooleanType ConvertImageCommand(ImageInfo *image_info,
                 argv[i]);
             break;
           }
+        if (LocaleCompare("color-threshold",option+1) == 0)
+          {
+            if (*option == '+')
+              break;
+            i++;
+            if (i == (ssize_t) argc)
+              ThrowConvertException(OptionError,"MissingArgument",option);
+            break;
+          }
         if (LocaleCompare("combine",option+1) == 0)
           break;
         if (LocaleCompare("comment",option+1) == 0)

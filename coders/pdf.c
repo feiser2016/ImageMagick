@@ -79,6 +79,7 @@
 #include "MagickCore/signature.h"
 #include "MagickCore/static.h"
 #include "MagickCore/string_.h"
+#include "MagickCore/string-private.h"
 #include "MagickCore/timer-private.h"
 #include "MagickCore/token.h"
 #include "MagickCore/transform.h"
@@ -373,7 +374,6 @@ static Image *ReadPDFImage(const ImageInfo *image_info,ExceptionInfo *exception)
     command[MagickPathExtent],
     *density,
     filename[MagickPathExtent],
-    geometry[MagickPathExtent],
     input_filename[MagickPathExtent],
     message[MagickPathExtent],
     *options,
@@ -487,10 +487,10 @@ static Image *ReadPDFImage(const ImageInfo *image_info,ExceptionInfo *exception)
   if ((fabs(pdf_info.bounds.x2-pdf_info.bounds.x1) >= MagickEpsilon) &&
       (fabs(pdf_info.bounds.y2-pdf_info.bounds.y1) >= MagickEpsilon))
     {
-      (void) FormatLocaleString(geometry,MagickPathExtent,"%gx%g%+.15g%+.15g",
-        pdf_info.bounds.x2-pdf_info.bounds.x1,pdf_info.bounds.y2-
-        pdf_info.bounds.y1,pdf_info.bounds.x1,pdf_info.bounds.y1);
-      (void) SetImageProperty(image,"pdf:HiResBoundingBox",geometry,exception);
+      (void) FormatImageProperty(image,"pdf:HiResBoundingBox",
+        "%gx%g%+.15g%+.15g",pdf_info.bounds.x2-pdf_info.bounds.x1,
+        pdf_info.bounds.y2-pdf_info.bounds.y1,pdf_info.bounds.x1,
+        pdf_info.bounds.y1);
       page.width=(size_t) ((ssize_t) ceil((double) ((pdf_info.bounds.x2-
         pdf_info.bounds.x1)*image->resolution.x/delta.x)-0.5));
       page.height=(size_t) ((ssize_t) ceil((double) ((pdf_info.bounds.y2-
@@ -1212,7 +1212,8 @@ RestoreMSCWarning
     *profile;
 
   double
-    pointsize;
+    pointsize,
+    version;
 
   GeometryInfo
     geometry_info;
@@ -1263,8 +1264,7 @@ RestoreMSCWarning
     object,
     pages_id,
     root_id,
-    text_size,
-    version;
+    text_size;
 
   ssize_t
     count,
@@ -1305,19 +1305,27 @@ RestoreMSCWarning
     Write Info object.
   */
   object=0;
-  version=3;
-  if (image_info->compression == JPEG2000Compression)
-    version=(size_t) MagickMax(version,5);
+  version=1.3;
   for (next=image; next != (Image *) NULL; next=GetNextImageInList(next))
     if (next->alpha_trait != UndefinedPixelTrait)
-      version=(size_t) MagickMax(version,4);
+      version=1.4;
+  if (image_info->compression == JPEG2000Compression)
+    version=1.5;
   if (LocaleCompare(image_info->magick,"PDFA") == 0)
-    version=(size_t) MagickMax(version,6);
+    version=1.6;
   profile=GetImageProfile(image,"icc");
   if (profile != (StringInfo *) NULL)
-    version=(size_t) MagickMax(version,7);
-  (void) FormatLocaleString(buffer,MagickPathExtent,"%%PDF-1.%.20g \n",(double)
-    version);
+    version=1.7;
+  option=GetImageOption(image_info,"pdf:version");
+  if (option != (const char *) NULL)
+    {
+      double
+        preferred_version;
+
+      preferred_version=StringToDouble(option,(char**) NULL);
+      version=MagickMax(version,MagickMin(1.7, preferred_version));
+    }
+  (void) FormatLocaleString(buffer,MagickPathExtent,"%%PDF-%.2g \n",version);
   (void) WriteBlobString(image,buffer);
   if (LocaleCompare(image_info->magick,"PDFA") == 0)
     {
@@ -2253,7 +2261,10 @@ RestoreMSCWarning
     SetGeometry(image,&geometry);
     (void) ParseMetaGeometry("106x106+0+0>",&geometry.x,&geometry.y,
       &geometry.width,&geometry.height);
-    tile_image=ThumbnailImage(image,geometry.width,geometry.height,exception);
+    if (IsImageMonochrome(image) != MagickFalse)
+      tile_image=SampleImage(image,geometry.width,geometry.height,exception);
+    else
+      tile_image=ThumbnailImage(image,geometry.width,geometry.height,exception);
     if (tile_image == (Image *) NULL)
       return(MagickFalse);
     xref[object++]=TellBlob(image);
@@ -2930,7 +2941,7 @@ RestoreMSCWarning
           hex_digits[13]='D';
           hex_digits[14]='E';
           hex_digits[15]='F';
-          (void) FormatLocaleString(buffer,MagickPathExtent,"/Title <FEFF");
+          (void) FormatLocaleString(buffer,MagickPathExtent,"/Title <");
           (void) WriteBlobString(image,buffer);
           for (i=0; i < (ssize_t) length; i++)
           {

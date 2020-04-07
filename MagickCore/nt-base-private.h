@@ -54,22 +54,6 @@ typedef struct _DIR
     file_info;
 } DIR;
 
-typedef struct _NTMEMORYSTATUSEX
-{
-  DWORD
-    dwLength,
-    dwMemoryLoad;
-
-  DWORDLONG
-    ullTotalPhys,
-    ullAvailPhys,
-    ullTotalPageFile,
-    ullAvailPageFile,
-    ullTotalVirtual,
-    ullAvailVirtual,
-    ullAvailExtendedVirtual;
-} NTMEMORYSTATUSEX;
-
 #if !defined(__MINGW32__)
 struct timeval;
 
@@ -80,12 +64,6 @@ struct timezone
     tz_dsttime;
 };
 #endif
-
-typedef UINT
-  (CALLBACK *LPFNDLLFUNC1)(DWORD,UINT);
-
-typedef UINT
-  (CALLBACK *LPFNDLLFUNC2)(NTMEMORYSTATUSEX *);
 
 #endif
 
@@ -132,14 +110,11 @@ extern MagickPrivate int
   NTGhostscriptLoadDLL(void),
   NTInitializeLibrary(void),
   NTSetSearchPath(const char *),
-  NTSyncMemory(void *,size_t,int),
   NTUnmapMemory(void *,size_t),
   NTSystemCommand(const char *,char *);
 
 extern MagickPrivate ssize_t
-  NTGetPageSize(void),
-  NTSystemConfiguration(int),
-  NTTellDirectory(DIR *);
+  NTSystemConfiguration(int);
 
 extern MagickPrivate MagickBooleanType
   NTGatherRandomData(const size_t,unsigned char *),
@@ -162,7 +137,6 @@ extern MagickPrivate void
   NTInitializeWinsock(MagickBooleanType),
   *NTMapMemory(char *,size_t,int,int,int,MagickOffsetType),
   *NTOpenLibrary(const char *),
-  NTSeekDirectory(DIR *,ssize_t),
   NTWindowsGenesis(void),
   NTWindowsTerminus(void);
 

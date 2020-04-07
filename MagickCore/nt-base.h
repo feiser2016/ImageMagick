@@ -52,7 +52,7 @@ extern "C" {
 #define R_OK 4
 #define W_OK 2
 #define RW_OK 6
-#define _SC_PAGESIZE 1
+#define _SC_PAGE_SIZE 1
 #define _SC_PHYS_PAGES 2
 #define _SC_OPEN_MAX 3
 #if !defined(SSIZE_MAX)
@@ -193,9 +193,6 @@ extern "C" {
 #  define mmap(address,length,protection,access,file,offset) \
   NTMapMemory(address,length,protection,access,file,offset)
 #endif
-#if !defined(msync)
-#  define msync(address,length,flags)  NTSyncMemory(address,length,flags)
-#endif
 #if !defined(munmap)
 #  define munmap(address,length)  NTUnmapMemory(address,length)
 #endif
@@ -219,9 +216,6 @@ extern "C" {
 #endif
 #if !defined(readdir)
 #  define readdir(directory)  NTReadDirectory(directory)
-#endif
-#if !defined(seekdir)
-#  define seekdir(directory,offset)  NTSeekDirectory(directory,offset)
 #endif
 #if !defined(setmode)
 #  define setmode  _setmode
@@ -256,9 +250,6 @@ extern "C" {
 #  define tell  _telli64
 #else
 #  define tell  _tell
-#endif
-#if !defined(telldir)
-#  define telldir(directory)  NTTellDirectory(directory)
 #endif
 #if !defined(tempnam)
 #  define tempnam  _tempnam_s

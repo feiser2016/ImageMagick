@@ -1353,6 +1353,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
 
   ssize_t
     code,
+    last_character,
     y;
 
   static FT_Outline_Funcs
@@ -1517,7 +1518,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
   if (draw_info->render == MagickFalse)
     flags=FT_LOAD_NO_BITMAP;
   if (draw_info->text_antialias == MagickFalse)
-    flags|=FT_LOAD_TARGET_MONO;
+    flags|=FT_LOAD_RENDER | FT_LOAD_TARGET_MONO;
   else
     {
 #if defined(FT_LOAD_TARGET_LIGHT)
@@ -1576,6 +1577,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
     exception);
   missing_glyph_id=FT_Get_Char_Index(face,' ');
   code=0;
+  last_character=(ssize_t) length-1;
   for (i=0; i < (ssize_t) length; i++)
   {
     FT_Outline
@@ -1779,6 +1781,13 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
         (IsUTFSpace(GetUTFCode(p+grapheme[i].cluster)) != MagickFalse) &&
         (IsUTFSpace(code) == MagickFalse))
       origin.x+=(FT_Pos) (64.0*draw_info->interword_spacing);
+    else if (i == last_character)
+      {
+        if (bounds.xMax == 0)
+          origin.x+=(FT_Pos) grapheme[i].x_advance;
+        else
+          origin.x+=(FT_Pos) bounds.xMax;
+      }
     else
       origin.x+=(FT_Pos) grapheme[i].x_advance;
     metrics->origin.x=(double) origin.x;
@@ -1806,7 +1815,7 @@ static MagickBooleanType RenderFreetype(Image *image,const DrawInfo *draw_info,
   metrics->bounds.y2/=64.0;
   metrics->origin.x/=64.0;
   metrics->origin.y/=64.0;
-  metrics->width/=64.0;
+  metrics->width=ceil(metrics->width/64.0);
   /*
     Relinquish resources.
   */

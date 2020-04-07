@@ -55,6 +55,7 @@
 #include "MagickWand/wand.h"
 #include "MagickWand/wandcli.h"
 #include "MagickWand/wandcli-private.h"
+#include "MagickCore/color-private.h"
 #include "MagickCore/composite-private.h"
 #include "MagickCore/image-private.h"
 #include "MagickCore/monitor-private.h"
@@ -265,10 +266,14 @@ static Image *SparseColorOption(const Image *image,
     sizeof(*sparse_arguments));
   p=arguments;
   x=0;
-  while( *p != '\0' && x < number_arguments ) {
+  while ((*p != '\0') && (x < number_arguments))
+  {
     /* X coordinate */
-    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-    if (*token == '\0') break;
+    *token=',';
+    while (*token == ',')
+      (void) GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == '\0')
+      break;
     if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       (void) ThrowMagickException(exception,GetMagickModule(),
             OptionError, "InvalidArgument", "'%s': %s", "sparse-color",
@@ -278,8 +283,11 @@ static Image *SparseColorOption(const Image *image,
     }
     sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
     /* Y coordinate */
-    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-    if (*token == '\0') break;
+    *token=',';
+    while (*token == ',')
+      (void) GetNextToken(p,&p,MagickPathExtent,token);
+    if (*token == '\0')
+      break;
     if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       (void) ThrowMagickException(exception,GetMagickModule(),
             OptionError, "InvalidArgument", "'%s': %s", "sparse-color",
@@ -289,7 +297,9 @@ static Image *SparseColorOption(const Image *image,
     }
     sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
     /* color name or function given in string argument */
-    *token=','; while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
+    *token=',';
+    while (*token == ',')
+      (void) GetNextToken(p,&p,MagickPathExtent,token);
     if (*token == '\0') break;
     if ( isalpha((int) ((unsigned char) *token)) || *token == '#' ) {
       /* Color string given */
@@ -313,46 +323,51 @@ static Image *SparseColorOption(const Image *image,
       /* NB: token contains the first floating point value to use! */
       if ((GetPixelRedTraits(image) & UpdatePixelTrait) != 0)
         {
-        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
-          break;
-        sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        *token=','; /* used this token - get another */
-      }
+          while (*token == ',')
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
+          if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
+            break;
+          sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
+          *token=','; /* used this token - get another */
+        }
       if ((GetPixelGreenTraits(image) & UpdatePixelTrait) != 0)
         {
-        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
-          break;
-        sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        *token=','; /* used this token - get another */
-      }
+          while (*token == ',')
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
+          if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
+            break;
+          sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
+          *token=','; /* used this token - get another */
+        }
       if ((GetPixelBlueTraits(image) & UpdatePixelTrait) != 0)
         {
-        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
-          break;
-        sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        *token = ','; /* used this token - get another */
-      }
+          while (*token == ',')
+           (void) GetNextToken(p,&p,MagickPathExtent,token);
+          if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
+            break;
+          sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
+          *token = ','; /* used this token - get another */
+        }
       if (((GetPixelBlackTraits(image) & UpdatePixelTrait) != 0) &&
           (image->colorspace == CMYKColorspace))
         {
-        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
-          break;
-        sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        *token=','; /* used this token - get another */
-      }
+          while (*token == ',')
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
+          if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
+            break;
+          sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
+          *token=','; /* used this token - get another */
+        }
       if (((GetPixelAlphaTraits(image) & UpdatePixelTrait) != 0) &&
           image->alpha_trait != UndefinedPixelTrait)
         {
-        while (*token == ',') GetNextToken(p,&p,MagickPathExtent,token);
-        if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
-          break;
-        sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
-        *token = ','; /* used this token - get another */
-      }
+          while (*token == ',')
+            (void) GetNextToken(p,&p,MagickPathExtent,token);
+          if ((*token == '\0') || isalpha((int) ((unsigned char) *token)) || *token == '#' )
+            break;
+          sparse_arguments[x++]=StringToDouble(token,(char **) NULL);
+          *token = ','; /* used this token - get another */
+        }
     }
   }
   if (error != MagickFalse)
@@ -2065,6 +2080,22 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
                     _exception);
           break;
         }
+      if (LocaleCompare("color-threshold",option+1) == 0)
+        {
+          PixelInfo
+            start,
+            stop;
+
+          /*
+            Color threshold image.
+          */
+          if (*option == '+')
+            (void) GetColorRange("white-black",&start,&stop,_exception);
+          else
+            (void) GetColorRange(arg1,&start,&stop,_exception);
+          (void) ColorThresholdImage(_image,&start,&stop,_exception);
+          break;
+        }
       if (LocaleCompare("connected-components",option+1) == 0)
         {
           if (IsGeometry(arg1) == MagickFalse)
@@ -2094,7 +2125,8 @@ static MagickBooleanType CLISimpleOperatorImage(MagickCLI *cli_wand,
           black_point=geometry_info.rho;
           white_point=(flags & SigmaValue) != 0 ? geometry_info.sigma :
             black_point;
-          if ((flags & PercentValue) != 0) {
+          if ((flags & PercentValue) != 0)
+            {
               black_point*=(double) _image->columns*_image->rows/100.0;
               white_point*=(double) _image->columns*_image->rows/100.0;
             }
@@ -4559,26 +4591,15 @@ WandPrivate MagickBooleanType CLIListOperatorImages(MagickCLI *cli_wand,
 
           if (new_images != (Image *) NULL)
             {
-              char
-                result[MagickPathExtent];
-
-              (void) FormatLocaleString(result,MagickPathExtent,"%lf",
-                similarity);
-              (void) SetImageProperty(new_images,"subimage:similarity",result,
-                _exception);
-              (void) FormatLocaleString(result,MagickPathExtent,"%+ld",(long)
+              (void) FormatImageProperty(new_images,"subimage:similarity",
+                "%.*g",GetMagickPrecision(),similarity);
+              (void) FormatImageProperty(new_images,"subimage:x","%+ld",(long)
                 offset.x);
-              (void) SetImageProperty(new_images,"subimage:x",result,
-                _exception);
-              (void) FormatLocaleString(result,MagickPathExtent,"%+ld",(long)
+              (void) FormatImageProperty(new_images,"subimage:y","%+ld",(long)
                 offset.y);
-              (void) SetImageProperty(new_images,"subimage:y",result,
-                _exception);
-              (void) FormatLocaleString(result,MagickPathExtent,
+              (void) FormatImageProperty(new_images,"subimage:offset",
                 "%lux%lu%+ld%+ld",(unsigned long) offset.width,(unsigned long)
                 offset.height,(long) offset.x,(long) offset.y);
-              (void) SetImageProperty(new_images,"subimage:offset",result,
-                _exception);
             }
           break;
         }

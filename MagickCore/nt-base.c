@@ -986,15 +986,16 @@ MagickPrivate const char *NTGetLibraryError(void)
 */
 void *NTGetLibrarySymbol(void *handle,const char *name)
 {
-  LPFNDLLFUNC1
-    lpfnDllFunc1;
+  FARPROC
+    proc_address;
 
-  lpfnDllFunc1=(LPFNDLLFUNC1) GetProcAddress((HINSTANCE) handle,name);
-  if (!lpfnDllFunc1)
+  proc_address=GetProcAddress((HMODULE) handle,(LPCSTR) name);
+  if (proc_address == (FARPROC) NULL)
     return((void *) NULL);
-  return((void *) lpfnDllFunc1);
+  return((void *) proc_address);
 }
-
+
+
 /*
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %                                                                             %
@@ -1038,33 +1039,6 @@ MagickPrivate MagickBooleanType NTGetModulePath(const char *module,char *path)
   if (length != 0)
     GetPathComponent(module_path,HeadPath,path);
   return(MagickTrue);
-}
-
-/*
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                                                                             %
-%                                                                             %
-%                                                                             %
-+    N T G e t P a g e S i z e                                                %
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  NTGetPageSize() returns the memory page size under Windows.
-%
-%  The format of the NTPageSize
-%
-%      NTPageSize()
-%
-*/
-MagickPrivate ssize_t NTGetPageSize(void)
-{
-  SYSTEM_INFO
-    system_info;
-
-   GetSystemInfo(&system_info);
-   return((ssize_t) system_info.dwPageSize);
 }
 
 /*
@@ -2291,40 +2265,6 @@ MagickPrivate unsigned char *NTResourceToBlob(const char *id)
 %                                                                             %
 %                                                                             %
 %                                                                             %
-%   N T S e e k D i r e c t o r y                                             %
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  NTSeekDirectory() sets the position of the next NTReadDirectory() operation
-%  on the directory stream.
-%
-%  The format of the NTSeekDirectory method is:
-%
-%      void NTSeekDirectory(DIR *entry,ssize_t position)
-%
-%  A description of each parameter follows:
-%
-%    o entry: Specifies a pointer to a DIR structure.
-%
-%    o position: specifies the position associated with the directory
-%      stream.
-%
-*/
-MagickPrivate void NTSeekDirectory(DIR *entry,ssize_t position)
-{
-  (void) LogMagickEvent(TraceEvent,GetMagickModule(),"...");
-  assert(entry != (DIR *) NULL);
-  (void) entry;
-  (void) position;
-}
-
-/*
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                                                                             %
-%                                                                             %
-%                                                                             %
 %   N T S e t S e a r c h P a t h                                             %
 %                                                                             %
 %                                                                             %
@@ -2354,40 +2294,6 @@ MagickPrivate int NTSetSearchPath(const char *path)
   if (path != (char *) NULL)
     lt_slsearchpath=AcquireString(path);
 #endif
-  return(0);
-}
-
-/*
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                                                                             %
-%                                                                             %
-%                                                                             %
-+  N T S y n c M e m o r y                                                    %
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  NTSyncMemory() emulates the Unix method of the same name.
-%
-%  The format of the NTSyncMemory method is:
-%
-%      int NTSyncMemory(void *address,size_t length,int flags)
-%
-%  A description of each parameter follows:
-%
-%    o address: the address of the binary large object.
-%
-%    o length: the length of the binary large object.
-%
-%    o flags: Option flags (ignored for Windows).
-%
-*/
-MagickPrivate int NTSyncMemory(void *address,size_t length,int flags)
-{
-  (void) flags;
-  if (FlushViewOfFile(address,length) == MagickFalse)
-    return(-1);
   return(0);
 }
 
@@ -2571,7 +2477,7 @@ MagickPrivate ssize_t NTSystemConfiguration(int name)
 {
   switch (name)
   {
-    case _SC_PAGESIZE:
+    case _SC_PAGE_SIZE:
     {
       SYSTEM_INFO
         system_info;
@@ -2581,35 +2487,17 @@ MagickPrivate ssize_t NTSystemConfiguration(int name)
     }
     case _SC_PHYS_PAGES:
     {
-      HMODULE
-        handle;
-
-      LPFNDLLFUNC2
-        module;
-
-      NTMEMORYSTATUSEX
+      MEMORYSTATUSEX
         status;
 
       SYSTEM_INFO
         system_info;
 
-      handle=GetModuleHandle("kernel32.dll");
-      if (handle == (HMODULE) NULL)
+      status.dwLength=sizeof(status);
+      if (GlobalMemoryStatusEx(&status) == 0)
         return(0L);
       GetSystemInfo(&system_info);
-      module=(LPFNDLLFUNC2) NTGetLibrarySymbol(handle,"GlobalMemoryStatusEx");
-      if (module == (LPFNDLLFUNC2) NULL)
-        {
-          MEMORYSTATUS
-            global_status;
-
-          GlobalMemoryStatus(&global_status);
-          return((ssize_t) global_status.dwTotalPhys/system_info.dwPageSize/4);
-        }
-      status.dwLength=sizeof(status);
-      if (module(&status) == 0)
-        return(0L);
-      return((ssize_t) status.ullTotalPhys/system_info.dwPageSize/4);
+      return((ssize_t) status.ullTotalPhys/system_info.dwPageSize);
     }
     case _SC_OPEN_MAX:
       return(2048);
@@ -2617,36 +2505,6 @@ MagickPrivate ssize_t NTSystemConfiguration(int name)
       break;
   }
   return(-1);
-}
-
-/*
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%   N T T e l l D i r e c t o r y                                             %
-%                                                                             %
-%                                                                             %
-%                                                                             %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%  NTTellDirectory() returns the current location associated with the named
-%  directory stream.
-%
-%  The format of the NTTellDirectory method is:
-%
-%      ssize_t NTTellDirectory(DIR *entry)
-%
-%  A description of each parameter follows:
-%
-%    o entry: Specifies a pointer to a DIR structure.
-%
-*/
-MagickPrivate ssize_t NTTellDirectory(DIR *entry)
-{
-  magick_unreferenced(entry);
-  assert(entry != (DIR *) NULL);
-  return(0);
 }
 
 /*

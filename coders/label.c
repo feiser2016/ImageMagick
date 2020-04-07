@@ -217,7 +217,7 @@ static Image *ReadLABELImage(const ImageInfo *image_info,
         }
         if (status != MagickFalse)
           {
-            draw_info->pointsize=(low+high)/2.0-0.5;
+            draw_info->pointsize=floor((low+high)/2.0-0.5);
             status=GetMultilineTypeMetrics(image,draw_info,&metrics,exception);
           }
       }
@@ -261,14 +261,8 @@ static Image *ReadLABELImage(const ImageInfo *image_info,
   (void) CloneString(&draw_info->geometry,geometry);
   status=AnnotateImage(image,draw_info,exception);
   if (image_info->pointsize == 0.0)
-    {
-      char
-        pointsize[MagickPathExtent];
-
-      (void) FormatLocaleString(pointsize,MagickPathExtent,"%.20g",
-        draw_info->pointsize);
-      (void) SetImageProperty(image,"label:pointsize",pointsize,exception);
-    }
+    (void) FormatImageProperty(image,"label:pointsize","%.20g",
+      draw_info->pointsize);
   draw_info=DestroyDrawInfo(draw_info);
   if (status == MagickFalse)
     {

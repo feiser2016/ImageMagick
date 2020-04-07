@@ -892,7 +892,7 @@ static LinkedListInfo *AcquireColorCache(const char *filename,
     color_info->color.red=(double) ScaleCharToQuantum(p->red);
     color_info->color.green=(double) ScaleCharToQuantum(p->green);
     color_info->color.blue=(double) ScaleCharToQuantum(p->blue);
-    color_info->color.alpha=(double) (QuantumRange*p->alpha);
+    color_info->color.alpha=((double) QuantumRange*p->alpha);
     color_info->compliance=(ComplianceType) p->compliance;
     color_info->exempt=MagickTrue;
     color_info->signature=MagickCoreSignature;
@@ -1125,9 +1125,34 @@ MagickExport const ColorInfo *GetColorInfo(const char *name,
 %    o tuple:  The color tuple.
 %
 */
+
+static inline MagickBooleanType IsSVGCompliant(const PixelInfo *pixel)
+{
+#define SVGCompliant(component) ((double) \
+   ScaleCharToQuantum(ScaleQuantumToChar(ClampToQuantum(component))))
+#define SVGEpsilon  1.0e-6
+
+  /*
+    SVG requires color depths > 8 expressed as percentages.
+  */
+  if (fabs(SVGCompliant(pixel->red)-pixel->red) >= SVGEpsilon)
+    return(MagickFalse);
+  if (fabs(SVGCompliant(pixel->green)-pixel->green) >= SVGEpsilon)
+    return(MagickFalse);
+  if (fabs(SVGCompliant(pixel->blue)-pixel->blue) >= SVGEpsilon)
+    return(MagickFalse);
+  if ((pixel->colorspace == CMYKColorspace) &&
+      (fabs(SVGCompliant(pixel->black)-pixel->black) >= SVGEpsilon))
+    return(MagickFalse);
+  return(MagickTrue);
+}
+
 MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
   const PixelChannel channel,const ComplianceType compliance,char *tuple)
 {
+#define IsColorComponentFactional(color) \
+  ((color)-ScaleCharToQuantum(ScaleQuantumToChar(color)))
+
   char
     component[MagickPathExtent];
 
@@ -1141,9 +1166,7 @@ MagickExport void ConcatenateColorComponent(const PixelInfo *pixel,
     scale=255.0f;
   if ((compliance != NoCompliance) &&
       (IssRGBCompatibleColorspace(pixel->colorspace) != MagickFalse) &&
-      (((pixel->red-(ssize_t) pixel->red) >= MagickEpsilon) ||
-       ((pixel->green-(ssize_t) pixel->green) >= MagickEpsilon) ||
-       ((pixel->blue-(ssize_t) pixel->blue) >= MagickEpsilon)))
+      (IsSVGCompliant(pixel) == MagickFalse))
     scale=100.0f;
   switch (channel)
   {
@@ -1423,29 +1446,6 @@ MagickExport char **GetColorList(const char *pattern,
 %    o tuple: Return the color tuple as this string.
 %
 */
-
-static inline MagickBooleanType IsSVGCompliant(const PixelInfo *pixel)
-{
-#define SVGCompliant(component) ((double) \
-   ScaleCharToQuantum(ScaleQuantumToChar(ClampToQuantum(component))))
-
-  /*
-    SVG requires color depths > 8 expressed as percentages.
-  */
-  if (fabs(SVGCompliant(pixel->red)-pixel->red) >= MagickEpsilon)
-    return(MagickFalse);
-  if (fabs(SVGCompliant(pixel->green)-pixel->green) >= MagickEpsilon)
-    return(MagickFalse);
-  if (fabs(SVGCompliant(pixel->blue)-pixel->blue) >= MagickEpsilon)
-    return(MagickFalse);
-  if ((pixel->colorspace == CMYKColorspace) &&
-      (fabs(SVGCompliant(pixel->black)-pixel->black) >= MagickEpsilon))
-    return(MagickFalse);
-  if ((pixel->alpha_trait != UndefinedPixelTrait) &&
-      (fabs(SVGCompliant(pixel->alpha)-pixel->alpha) >= MagickEpsilon))
-    return(MagickFalse);
-  return(MagickTrue);
-}
 
 static void ConcatentateHexColorComponent(const PixelInfo *pixel,
   const PixelChannel channel,char *tuple)
@@ -2449,6 +2449,7 @@ MagickExport MagickBooleanType QueryColorCompliance(const char *name,
       if ((LocaleCompare(colorspace,"HCL") == 0) ||
           (LocaleCompare(colorspace,"HSB") == 0) ||
           (LocaleCompare(colorspace,"HSL") == 0) ||
+          (LocaleCompare(colorspace,"HSV") == 0) ||
           (LocaleCompare(colorspace,"HWB") == 0))
         {
           double
@@ -2456,36 +2457,49 @@ MagickExport MagickBooleanType QueryColorCompliance(const char *name,
             green,
             red;
 
-          if (LocaleCompare(colorspace,"HCL") == 0)
-            color->colorspace=HCLColorspace;
-          else
-            if (LocaleCompare(colorspace,"HSB") == 0)
-              color->colorspace=HSBColorspace;
-            else
-              if (LocaleCompare(colorspace,"HSL") == 0)
-                color->colorspace=HSLColorspace;
-              else
-                if (LocaleCompare(colorspace,"HWB") == 0)
-                  color->colorspace=HWBColorspace;
           scale=1.0/255.0;
           if ((flags & PercentValue) != 0)
             scale=1.0/100.0;
           geometry_info.sigma*=scale;
           geometry_info.xi*=scale;
-          if (LocaleCompare(colorspace,"HCL") == 0)
-            ConvertHCLToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
-              360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
-          else
-            if (LocaleCompare(colorspace,"HSB") == 0)
+          red=0.0;
+          green=0.0;
+          blue=0.0;
+          switch (color->colorspace)
+          {
+            case HCLColorspace:
+            {
+              ConvertHCLToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
+                360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
+              break;
+            }
+            case HSBColorspace:
+            {
               ConvertHSBToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
                 360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
-            else
-              if (LocaleCompare(colorspace,"HSL") == 0)
-                ConvertHSLToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
-                  360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
-              else
-                ConvertHWBToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
-                  360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
+              break;
+            }
+            case HSLColorspace:
+            {
+              ConvertHSLToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
+                360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
+              break;
+            }
+            case HSVColorspace:
+            {
+              ConvertHSVToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
+                360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
+              break;
+            }
+            case HWBColorspace:
+            {
+              ConvertHWBToRGB(fmod(fmod(geometry_info.rho,360.0)+360.0,360.0)/
+                360.0,geometry_info.sigma,geometry_info.xi,&red,&green,&blue);
+              break;
+            }
+            default:
+              break;
+          }
           color->colorspace=sRGBColorspace;
           color->red=(MagickRealType) red;
           color->green=(MagickRealType) green;

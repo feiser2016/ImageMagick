@@ -474,6 +474,7 @@ MagickExport Image *CharcoalImage(const Image *image,const double radius,
   edge_image=EdgeImage(image,radius,exception);
   if (edge_image == (Image *) NULL)
     return((Image *) NULL);
+  edge_image->alpha_trait=UndefinedPixelTrait;
   charcoal_image=(Image *) NULL;
   status=ClampImage(edge_image,exception);
   if (status != MagickFalse)
@@ -2359,6 +2360,7 @@ MagickExport MagickBooleanType SolarizeImage(Image *image,
         if ((double) image->colormap[i].blue > threshold)
           image->colormap[i].blue=QuantumRange-image->colormap[i].blue;
       }
+      return(SyncImage(image,exception));
     }
   /*
     Solarize image.

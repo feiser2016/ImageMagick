@@ -41,7 +41,7 @@
   Include declarations.
 */
 #include "MagickCore/studio.h"
-#include "MagickCore/property.h"
+#include "MagickCore/artifact.h"
 #include "MagickCore/blob.h"
 #include "MagickCore/cache-view.h"
 #include "MagickCore/color.h"
@@ -59,6 +59,7 @@
 #include "MagickCore/effect.h"
 #include "MagickCore/fx.h"
 #include "MagickCore/gem.h"
+#include "MagickCore/gem-private.h"
 #include "MagickCore/geometry.h"
 #include "MagickCore/image-private.h"
 #include "MagickCore/list.h"
@@ -70,6 +71,7 @@
 #include "MagickCore/option.h"
 #include "MagickCore/pixel-accessor.h"
 #include "MagickCore/pixel-private.h"
+#include "MagickCore/property.h"
 #include "MagickCore/quantize.h"
 #include "MagickCore/quantum.h"
 #include "MagickCore/quantum-private.h"
@@ -756,6 +758,8 @@ MagickExport MagickBooleanType AutoThresholdImage(Image *image,
   */
   (void) FormatLocaleString(property,MagickPathExtent,"%g%%",threshold);
   (void) SetImageProperty(image,"auto-threshold:threshold",property,exception);
+  if (IsStringTrue(GetImageArtifact(image,"auto-threshold:verbose")) != MagickFalse)
+    (void) FormatLocaleFile(stdout,"%.*g%%\n",GetMagickPrecision(),threshold);
   return(BilevelImage(image,QuantumRange*threshold/100.0,exception));
 }
 
@@ -1180,6 +1184,202 @@ MagickExport MagickBooleanType ClampImage(Image *image,ExceptionInfo *exception)
   }
   image_view=DestroyCacheView(image_view);
   return(status);
+}
+
+/*
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%     C o l o r T h r e s h o l d I m a g e                                   %
+%                                                                             %
+%                                                                             %
+%                                                                             %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%
+%  ColorThresholdImage() forces all pixels in the color range to white
+%  otherwise black.
+%
+%  The format of the ColorThresholdImage method is:
+%
+%      MagickBooleanType ColorThresholdImage(Image *image,
+%        const PixelInfo *start_color,const PixelInfo *stop_color,
+%        ExceptionInfo *exception)
+%
+%  A description of each parameter follows:
+%
+%    o image: the image.
+%
+%    o start_color, stop_color: define the start and stop color range.  Any
+%      pixel within the range returns white otherwise black.
+%
+%    o exception: return any errors or warnings in this structure.
+%
+*/
+MagickExport MagickBooleanType ColorThresholdImage(Image *image,
+  const PixelInfo *start_color,const PixelInfo *stop_color,
+  ExceptionInfo *exception)
+{
+#define ThresholdImageTag  "Threshold/Image"
+
+  CacheView
+    *image_view;
+
+  MagickBooleanType
+    status;
+
+  MagickOffsetType
+    progress;
+
+  PixelInfo
+    start,
+    stop;
+
+  ssize_t
+    y;
+
+  /*
+    Color threshold image.
+  */
+  assert(image != (Image *) NULL);
+  assert(image->signature == MagickCoreSignature);
+  if (image->debug != MagickFalse)
+    (void) LogMagickEvent(TraceEvent,GetMagickModule(),"%s",image->filename);
+  status=AcquireImageColormap(image,2,exception);
+  if (status == MagickFalse)
+    return(status);
+  start=(*start_color);
+  stop=(*stop_color);
+  switch (image->colorspace)
+  {
+    case HCLColorspace:
+    {
+      ConvertRGBToHCL(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToHCL(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    case HSBColorspace:
+    {
+      ConvertRGBToHSB(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToHSB(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    case HSLColorspace:
+    {
+      ConvertRGBToHSL(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToHSL(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    case HSVColorspace:
+    {
+      ConvertRGBToHSV(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToHSV(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    case HWBColorspace:
+    {
+      ConvertRGBToHWB(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToHWB(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    case LabColorspace:
+    {
+      ConvertRGBToLab(start_color->red,start_color->green,start_color->blue,
+        &start.red,&start.green,&start.blue);
+      ConvertRGBToLab(stop_color->red,stop_color->green,stop_color->blue,
+        &stop.red,&stop.green,&stop.blue);
+      break;
+    }
+    default:
+    {
+      start.red*=QuantumScale;
+      start.green*=QuantumScale;
+      start.blue*=QuantumScale;
+      stop.red*=QuantumScale;
+      stop.green*=QuantumScale;
+      stop.blue*=QuantumScale;
+      break;
+    }
+  }
+  start.red*=QuantumRange;
+  start.green*=QuantumRange;
+  start.blue*=QuantumRange;
+  stop.red*=QuantumRange;
+  stop.green*=QuantumRange;
+  stop.blue*=QuantumRange;
+  progress=0;
+  image_view=AcquireAuthenticCacheView(image,exception);
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+  #pragma omp parallel for schedule(static) shared(progress,status) \
+    magick_number_threads(image,image,image->rows,1)
+#endif
+  for (y=0; y < (ssize_t) image->rows; y++)
+  {
+    register ssize_t
+      x;
+
+    register Quantum
+      *magick_restrict q;
+
+    if (status == MagickFalse)
+      continue;
+    q=GetCacheViewAuthenticPixels(image_view,0,y,image->columns,1,exception);
+    if (q == (Quantum *) NULL)
+      {
+        status=MagickFalse;
+        continue;
+      }
+    for (x=0; x < (ssize_t) image->columns; x++)
+    {
+      MagickBooleanType
+        foreground = MagickTrue;
+
+      register ssize_t
+        i;
+
+      for (i=0; i < (ssize_t) GetPixelChannels(image); i++)
+      {
+        PixelChannel channel = GetPixelChannelChannel(image,i);
+        PixelTrait traits = GetPixelChannelTraits(image,channel);
+        if ((traits & UpdatePixelTrait) == 0)
+          continue;
+        if ((q[i] < GetPixelInfoChannel(&start,channel)) ||
+            (q[i] > GetPixelInfoChannel(&stop,channel)))
+          foreground=MagickFalse;
+      }
+      SetPixelIndex(image,(Quantum) (foreground != MagickFalse ? 1 : 0),q);
+      q+=GetPixelChannels(image);
+    }
+    if (SyncCacheViewAuthenticPixels(image_view,exception) == MagickFalse)
+      status=MagickFalse;
+    if (image->progress_monitor != (MagickProgressMonitor) NULL)
+      {
+        MagickBooleanType
+          proceed;
+
+#if defined(MAGICKCORE_OPENMP_SUPPORT)
+        #pragma omp atomic
+#endif
+        progress++;
+        proceed=SetImageProgress(image,ThresholdImageTag,progress,
+          image->rows);
+        if (proceed == MagickFalse)
+          status=MagickFalse;
+      }
+  }
+  image_view=DestroyCacheView(image_view);
+  image->colorspace=sRGBColorspace;
+  return(SyncImage(image,exception));
 }
 
 /*
@@ -2231,7 +2431,7 @@ MagickExport MagickBooleanType RangeThresholdImage(Image *image,
         if (image->channel_mask != DefaultChannels)
           pixel=(double) q[i];
         if (pixel < low_black)
-          q[i]=0;
+          q[i]=(Quantum) 0;
         else
           if ((pixel >= low_black) && (pixel < low_white))
             q[i]=ClampToQuantum(QuantumRange*
@@ -2245,9 +2445,9 @@ MagickExport MagickBooleanType RangeThresholdImage(Image *image,
                   high_black-high_white)*(high_black-pixel));
               else
                 if (pixel > high_black)
-                  q[i]=0;
+                  q[i]=(Quantum) 0;
                 else
-                  q[i]=0;
+                  q[i]=(Quantum) 0;
       }
       q+=GetPixelChannels(image);
     }

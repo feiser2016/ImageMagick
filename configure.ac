@@ -26,8 +26,8 @@ AC_PREREQ(2.69)
 # ==============================================================================
 m4_define([magick_major_version], [7])
 m4_define([magick_minor_version], [0])
-m4_define([magick_micro_version], [9])
-m4_define([magick_patchlevel_version], [25])
+m4_define([magick_micro_version], [10])
+m4_define([magick_patchlevel_version], [7])
 m4_define([magick_version],
           [magick_major_version.magick_minor_version.magick_micro_version-magick_patchlevel_version])
 m4_define([magick_git_revision],
@@ -1684,7 +1684,7 @@ AUTOTRACE_LIBS=""
 AUTOTRACE_PKG=""
 if test "x$with_autotrace" = "xyes"; then
   AC_MSG_RESULT([-------------------------------------------------------------])
-  PKG_CHECK_MODULES(AUTOTRACE,[autotrace >= 0.31.1], have_autotrace=yes, have_autotrace=no)
+  PKG_CHECK_MODULES(AUTOTRACE,[autotrace >= 0.31.2], have_autotrace=yes, have_autotrace=no)
   AC_MSG_RESULT([])
 fi
 
@@ -2413,7 +2413,7 @@ have_openjp2='no'
 LIBOPENJP2_CFLAGS=""
 LIBOPENJP2_LIBS=""
 LIBOPENJP2_PKG=""
-if test "x$with_openjp2" = "xyes"; then
+if test "$with_openjp2" != 'no'; then
   AC_MSG_RESULT([-------------------------------------------------------------])
   PKG_CHECK_MODULES(LIBOPENJP2,[libopenjp2 >= 2.1.0], have_openjp2=yes, have_openjp2=no)
   AC_MSG_RESULT([])
